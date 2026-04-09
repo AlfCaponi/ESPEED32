@@ -26,8 +26,9 @@ extern void initSettingsMenuItems();
 extern void initDisplayMenuItems();
 
 /**
- * Display settings submenu: VIEW, LANG, CASE, FSIZE, ANTISPIN, STATUS, BACK.
+ * Display settings submenu: VIEW, LANG, CASE, FSIZE, STEPS, STATUS, BACK.
  * Handles value editing for display-related parameters.
+ * STEPS opens a dedicated submenu for ANTISPIN, BRAKE STEP and SENSI STEP.
  */
 void showDisplaySettings() {
   initDisplayMenuItems();
@@ -102,8 +103,9 @@ void showDisplaySettings() {
         if (sel == DISPLAY_ITEMS_COUNT) {  /* BACK */
           break;
         }
-        if (sel == DISPLAY_ITEMS_COUNT - 2) {  /* ANTISPIN submenu */
-          showAntiSpinSettings();
+        /* STEPS submenu (ANTISPIN, BRAKE STEP, SENSI STEP) */
+        if (sel == DISPLAY_ITEMS_COUNT - 2) {
+          showStepsSettings();
           if (isEscapeToMainRequested()) break;
           initDisplayMenuItems();
           g_rotaryEncoder.setAcceleration(MENU_ACCELERATION);

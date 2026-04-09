@@ -206,6 +206,7 @@ details.doc-fold>:not(summary){margin-top:8px}
       <li>Ricalibra il trigger dopo un aggiornamento firmware o se modifichi la meccanica del grilletto.</li>
       <li><code>Power ON</code>: avvio normale e poi modalita RUNNING.</li>
       <li>Per build con <code>TLE493D</code>, variante e indirizzo del sensore vengono rilevati automaticamente all'avvio.</li>
+      <li>La famiglia del sensore trigger viene scelta in compilazione. Le release/build standard usano <code>TLE493D</code>; controller con <code>AS5600</code>, <code>AS5600L</code>, <code>MT6701</code> o <code>ANALOG</code> devono usare firmware compilato per quella famiglia.</li>
       <li>Tieni premuto <code>encoder button</code> durante l'accensione: calibrazione trigger.</li>
       <li>Tieni premuto <code>brake button</code> durante l'accensione: Self-Test (9 passi).</li>
     </ul>
@@ -240,7 +241,11 @@ details.doc-fold>:not(summary){margin-top:8px}
       <li><code>ACD</code>: stile ACD dove esiste una corrispondenza diretta (<code>SENSI</code> e <code>CHOKE</code> per LIMIT).</li>
       <li><code>DISPLAY -&gt; CASE</code> sceglie se mostrare le etichette in <code>UPPER</code> o <code>Pascal</code>.</li>
       <li><code>DISPLAY -&gt; FONT SIZE</code> cambia la vista lista/menu tra <code>LARGE</code> e <code>small</code>.</li>
-      <li><code>SCHERMO -&gt; ANTISPIN</code> apre il sottomenu delle impostazioni antispin dove selezioni l'unita di visualizzazione (<code>MS</code> / <code>%</code> / <code>TEXT</code>) e il passo dell'encoder per ogni unita.</li>
+      <li><code>SCHERMO -&gt; PASSI</code> apre il sottomenu dei passi che contiene ANTISPIN, PASSO FRENO e PASSO SENSI.</li>
+      <li><code>SCHERMO -&gt; PASSI -&gt; ANTISPIN</code> apre il sottomenu delle impostazioni antispin dove selezioni l'unita di visualizzazione (<code>MS</code> / <code>%</code> / <code>TEXT</code>) e il passo dell'encoder per ogni unita.</li>
+      <li><code>SCHERMO -&gt; PASSI -&gt; PASSO FRENO</code> imposta di quanti punti percentuali l'encoder sposta FRENO per clic (0,1–50,0%, predefinito 1,0%). Si configura in <code>IMPOSTAZIONI → SCHERMO → PASSI → PASSO FRENO</code>.</li>
+      <li><code>SCHERMO -&gt; PASSI -&gt; PASSO SENSI</code> imposta il passo dell'encoder per SENSI in incrementi di 0,1% (0,1–5,0%, predefinito 1,0%). Si configura in <code>IMPOSTAZIONI → SCHERMO → PASSI → PASSO SENSI</code>.</li>
+      <li>L'uscita PWM del motore usa una risoluzione duty a 10 bit, quindi i passi da 0,1% per FRENO/SENSI vengono mantenuti nei calcoli e nella conversione PWM.</li>
     </ul>
     <h3>Vista gara (LIST vs GRID)</h3>
     <ul>
@@ -331,9 +336,9 @@ details.doc-fold>:not(summary){margin-top:8px}
         <tr><th>Voce</th><th>Intervallo</th><th>Default</th><th>Descrizione</th></tr>
       </thead>
       <tbody>
-        <tr><td><code>BRAKE</code></td><td>0-100 %</td><td>95</td><td>Frenata con trigger rilasciato.</td></tr>
-        <tr><td><code>SENSI</code></td><td>0-90 % (e &lt;= LIMIT)</td><td>20</td><td>Potenza minima al primo movimento utile del trigger.</td></tr>
-        <tr><td><code>ANTIS</code></td><td>0-999 ms</td><td>30</td><td>Tempo della rampa anti-spin sopra il bypass di bassa uscita. Valore piu alto = salita di potenza piu lunga/lenta. Non e un delay puro del trigger. Unita di visualizzazione e passo encoder si configurano in <code>SCHERMO -&gt; ANTISPIN</code> (MS / % / TEXT).</td></tr>
+        <tr><td><code>BRAKE</code></td><td>0,0-100,0 %</td><td>95,0</td><td>Frenata con trigger rilasciato.</td></tr>
+        <tr><td><code>SENSI</code></td><td>0,0-90,0 % (e &lt;= LIMIT)</td><td>20,0</td><td>Potenza minima al primo movimento utile del trigger.</td></tr>
+        <tr><td><code>ANTIS</code></td><td>0-999 ms</td><td>30</td><td>Tempo della rampa anti-spin sopra il bypass di bassa uscita. Valore piu alto = salita di potenza piu lunga/lenta. Non e un delay puro del trigger. Unita di visualizzazione e passo encoder si configurano in <code>SCHERMO -&gt; PASSI -&gt; ANTISPIN</code> (MS / % / TEXT).</td></tr>
         <tr><td><code>CURVE</code></td><td>10-90 %</td><td>50</td><td>Curva del trigger. 50 = lineare.</td></tr>
         <tr><td><code>FADE</code></td><td>0-30 %</td><td>0</td><td>Zona di avvio morbido. 0 = disattivato / comportamento precedente. Sopra 0, la prima parte del trigger sale da 0 a SENSI prima che continui la CURVE normale.</td></tr>
         <tr><td><code>PWM_F</code></td><td>1.0-5.0 kHz</td><td>4.0</td><td>Frequenza PWM del motore.</td></tr>
@@ -547,6 +552,9 @@ details.doc-fold>:not(summary){margin-top:8px}
       <li>Apri <code>SETTINGS -> USB INFO</code>.</li>
       <li>Usa Chrome/Edge (WebSerial).</li>
       <li>Backup/restore funzionano via USB; OTA richiede la modalita WiFi.</li>
+      <li>L'OTA automatico in coppia installa la release ufficiale standard, che usa il firmware <code>TLE493D</code> predefinito.</li>
+      <li>Se il controller usa un'altra famiglia di sensori trigger, carica manualmente il firmware specifico per quel sensore insieme al file SPIFFS della stessa release.</li>
+      <li>Su Windows, <code>flash_all.sh</code> di solito significa Git Bash o WSL. Arduino IDE puo comunque caricare lo sketch, ma la famiglia del sensore resta una scelta di compilazione.</li>
     </ol>
     <p class="warn">Non togliere mai alimentazione durante un upload OTA.</p>
   </section>
@@ -592,10 +600,14 @@ details.doc-fold>:not(summary){margin-top:8px}
 |  |  |- LANGUAGE (NOR/ENG/CS/ACD/ESP/DEU/ITA/NLD/POR)
 |  |  |- CASE (UPPER/Pascal)
 |  |  |- FONT SIZE (LARGE/small)
-|  |  |- ANTISPIN
-|  |  |  |- TIPO REG (MS / % / TEXT, predefinito MS)
-|  |  |  |- PASSO MS (1-50 ms, predefinito 5)  [nascosto in modalita TEXT]
-|  |  |  |- PASSO % (1-100 %, predefinito 1)   [visibile solo in modalita %]
+|  |  |- PASSI
+|  |  |  |- ANTISPIN
+|  |  |  |  |- TIPO REG (MS / % / TEXT, predefinito MS)
+|  |  |  |  |- PASSO MS (1-50 ms, predefinito 5)  [nascosto in modalita TEXT]
+|  |  |  |  |- PASSO % (1-100 %, predefinito 1)   [visibile solo in modalita %]
+|  |  |  |  `- INDIETRO
+|  |  |  |- PASSO FRENO (0,1-50,0 %, predefinito 1,0%)
+|  |  |  |- PASSO SENSI (0,1-5,0 % in passi da 0,1%, predefinito 1,0%)
 |  |  |  `- INDIETRO
 |  |  |- STATUS BAR
 |  |  |  |- SLOT 1
