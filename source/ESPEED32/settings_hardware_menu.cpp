@@ -21,29 +21,30 @@ extern void requestEscapeToMain();
 extern bool isEscapeToMainRequested();
 extern void showScreensaver();
 extern void saveEEPROM(StoredVar_type toSave);
+extern void initMenuItems();
 
 static const char* HARDWARE_MENU_LABELS[9][HARDWARE_ITEMS_COUNT] = {
-  {"ENC.INVERT", "EKST.POT.", "TRIGGER", "TEST", "TILBAKE"},
-  {"ENC.INVERT", "EXT.POT.", "TRIGGER", "TEST", "BACK"},
-  {"ENC.INVERT", "EXT.POT.", "TRIGGER", "TEST", "BACK"},
-  {"ENC.INVERT", "EXT.POT.", "TRIGGER", "TEST", "BACK"},
-  {"ENC.INVERT", "POT.EXT.", "TRIGGER", "TEST", "ATRAS"},
-  {"ENC.INVERT", "EXT.POT.", "TRIGGER", "TEST", "ZURUCK"},
-  {"ENC.INVERT", "POT.EST.", "TRIGGER", "TEST", "INDIETRO"},
-  {"ENC.INVERT", "EXT.POT.", "TRIGGER", "TEST", "TERUG"},
-  {"ENC.INVERT", "POT.EXT.", "TRIGGER", "TESTE", "VOLTAR"}
+  {"ENC.INVERT", "EKST.POT.", "TRIGGER", "PWM MAX", "TEST", "TILBAKE"},
+  {"ENC.INVERT", "EXT.POT.", "TRIGGER", "PWM MAX", "TEST", "BACK"},
+  {"ENC.INVERT", "EXT.POT.", "TRIGGER", "PWM MAX", "TEST", "BACK"},
+  {"ENC.INVERT", "EXT.POT.", "TRIGGER", "PWM MAX", "TEST", "BACK"},
+  {"ENC.INVERT", "POT.EXT.", "TRIGGER", "PWM MAX", "TEST", "ATRAS"},
+  {"ENC.INVERT", "EXT.POT.", "TRIGGER", "PWM MAX", "TEST", "ZURUCK"},
+  {"ENC.INVERT", "POT.EST.", "TRIGGER", "PWM MAX", "TEST", "INDIETRO"},
+  {"ENC.INVERT", "EXT.POT.", "TRIGGER", "PWM MAX", "TEST", "TERUG"},
+  {"ENC.INVERT", "POT.EXT.", "TRIGGER", "PWM MAX", "TESTE", "VOLTAR"}
 };
 
 static const char* HARDWARE_MENU_LABELS_PASCAL[9][HARDWARE_ITEMS_COUNT] = {
-  {"Enc.Invert", "Ekst.Pot.", "Trigger", "Test", "Tilbake"},
-  {"Enc.Invert", "Ext.Pot.", "Trigger", "Test", "Back"},
-  {"Enc.Invert", "Ext.Pot.", "Trigger", "Test", "Back"},
-  {"Enc.Invert", "Ext.Pot.", "Trigger", "Test", "Back"},
-  {"Enc.Invert", "Pot.Ext.", "Trigger", "Test", "Atras"},
-  {"Enc.Invert", "Ext.Pot.", "Trigger", "Test", "Zuruck"},
-  {"Enc.Invert", "Pot.Est.", "Trigger", "Test", "Indietro"},
-  {"Enc.Invert", "Ext.Pot.", "Trigger", "Test", "Terug"},
-  {"Enc.Invert", "Pot.Ext.", "Trigger", "Teste", "Voltar"}
+  {"Enc.Invert", "Ekst.Pot.", "Trigger", "Pwm Max", "Test", "Tilbake"},
+  {"Enc.Invert", "Ext.Pot.", "Trigger", "Pwm Max", "Test", "Back"},
+  {"Enc.Invert", "Ext.Pot.", "Trigger", "Pwm Max", "Test", "Back"},
+  {"Enc.Invert", "Ext.Pot.", "Trigger", "Pwm Max", "Test", "Back"},
+  {"Enc.Invert", "Pot.Ext.", "Trigger", "Pwm Max", "Test", "Atras"},
+  {"Enc.Invert", "Ext.Pot.", "Trigger", "Pwm Max", "Test", "Zuruck"},
+  {"Enc.Invert", "Pot.Est.", "Trigger", "Pwm Max", "Test", "Indietro"},
+  {"Enc.Invert", "Ext.Pot.", "Trigger", "Pwm Max", "Test", "Terug"},
+  {"Enc.Invert", "Pot.Ext.", "Trigger", "Pwm Max", "Teste", "Voltar"}
 };
 
 static const char* SENSOR_MENU_LABELS[9][4] = {
@@ -168,6 +169,8 @@ static void showTriggerSensorSettings() {
 
   uint8_t sel = 0;
   bool needRedraw = true;
+  MenuState_enum trigMenuState = ITEM_SELECTION;
+  uint16_t tempTrigType = 0;
   uint32_t lastInteraction = millis();
   bool screensaverActive = false;
   uint16_t screensaverEncoderPos = (uint16_t)readUiEncoder();
@@ -209,20 +212,35 @@ static void showTriggerSensorSettings() {
 
     if (g_rotaryEncoder.encoderChanged()) {
       lastInteraction = millis();
-      sel = (uint8_t)readUiEncoder();
+      if (trigMenuState == ITEM_SELECTION) {
+        sel = (uint8_t)readUiEncoder();
+      } else {
+        tempTrigType = (uint16_t)readUiEncoder();
+      }
       needRedraw = true;
     }
 
     if (g_rotaryEncoder.isEncoderButtonClicked()) {
       lastInteraction = millis();
-      if (sel == itemBack) {
-        break;
-      }
-      if (supportsTypeOverride && sel == itemType) {
-        uint16_t nextType = HAL_GetTriggerSensorTypeOverride();
-        nextType = (nextType >= TRIGGER_SENSOR_TYPE_MAX) ? TRIGGER_SENSOR_TYPE_AUTO : (uint16_t)(nextType + 1);
-        (void)HAL_SetTriggerSensorTypeOverride(nextType);
+      if (trigMenuState == VALUE_SELECTION) {
+        /* Confirm */
+        (void)HAL_SetTriggerSensorTypeOverride(tempTrigType);
+        trigMenuState = ITEM_SELECTION;
+        g_rotaryEncoder.setAcceleration(MENU_ACCELERATION);
+        setUiEncoderBoundaries(0, numItems - 1, false);
+        resetUiEncoder(sel);
         needRedraw = true;
+      } else {
+        if (sel == itemBack) {
+          break;
+        } else if (supportsTypeOverride && sel == itemType) {
+          tempTrigType = HAL_GetTriggerSensorTypeOverride();
+          trigMenuState = VALUE_SELECTION;
+          g_rotaryEncoder.setAcceleration(SEL_ACCELERATION);
+          setUiEncoderBoundaries(TRIGGER_SENSOR_TYPE_AUTO, TRIGGER_SENSOR_TYPE_MAX, false);
+          resetUiEncoder(tempTrigType);
+          needRedraw = true;
+        }
       }
       delay(200);
     }
@@ -233,8 +251,18 @@ static void showTriggerSensorSettings() {
       if (!brakeBtnInMenu && millis() - lastBrakeBtnTime > BUTTON_SHORT_PRESS_DEBOUNCE_MS) {
         brakeBtnInMenu = true;
         lastBrakeBtnTime = millis();
-        while (digitalRead(BUTT_PIN) == BUTTON_PRESSED) { vTaskDelay(5); }
-        break;
+        if (trigMenuState == VALUE_SELECTION) {
+          /* Cancel */
+          trigMenuState = ITEM_SELECTION;
+          g_rotaryEncoder.setAcceleration(MENU_ACCELERATION);
+          setUiEncoderBoundaries(0, numItems - 1, false);
+          resetUiEncoder(sel);
+          obdFill(&g_obd, OBD_WHITE, 1);
+          needRedraw = true;
+        } else {
+          while (digitalRead(BUTT_PIN) == BUTTON_PRESSED) { vTaskDelay(5); }
+          break;
+        }
       }
     } else {
       brakeBtnInMenu = false;
@@ -250,15 +278,17 @@ static void showTriggerSensorSettings() {
       char typeBuf[16];
       HAL_GetTriggerSensorFamilyLabel(familyBuf, sizeof(familyBuf));
       HAL_GetTriggerSensorActiveTypeLabel(activeBuf, sizeof(activeBuf));
-      HAL_GetTriggerSensorTypeOptionLabel(HAL_GetTriggerSensorTypeOverride(), typeBuf, sizeof(typeBuf));
+      uint16_t displayType = (trigMenuState == VALUE_SELECTION) ? tempTrigType : HAL_GetTriggerSensorTypeOverride();
+      HAL_GetTriggerSensorTypeOptionLabel(displayType, typeBuf, sizeof(typeBuf));
 
       for (uint8_t i = 0; i < numItems; i++) {
-        bool isSelected = (sel == i);
+        bool isNameSel  = (sel == i && trigMenuState == ITEM_SELECTION);
+        bool isValueSel = (sel == i && trigMenuState == VALUE_SELECTION);
         const char* label = (i == itemBack)
           ? getBackLabel(lang)
           : getSensorMenuLabel(lang, i);
         obdWriteString(&g_obd, 0, 0, i * lineH, (char*)label,
-                       menuFont, isSelected ? OBD_WHITE : OBD_BLACK, 1);
+                       menuFont, isNameSel ? OBD_WHITE : OBD_BLACK, 1);
 
         const char* value = nullptr;
         if (i == itemFamily) value = familyBuf;
@@ -266,7 +296,7 @@ static void showTriggerSensorSettings() {
         else if (supportsTypeOverride && i == itemType) value = typeBuf;
 
         if (value != nullptr && value[0] != '\0') {
-          drawRightAlignedValue(i * lineH, value, isSelected, 8);
+          drawRightAlignedValue(i * lineH, value, isNameSel || isValueSel, 8);
         }
       }
     }
@@ -283,8 +313,9 @@ void showHardwareSettings() {
   const uint8_t itemEncInv = 0;
   const uint8_t itemExtPot = 1;
   const uint8_t itemTrigger = 2;
-  const uint8_t itemTest = 3;
-  const uint8_t itemBack = 4;
+  const uint8_t itemPwmMax = 3;
+  const uint8_t itemTest = 4;
+  const uint8_t itemBack = 5;
 
   obdFill(&g_obd, OBD_WHITE, 1);
   g_rotaryEncoder.setAcceleration(MENU_ACCELERATION);
@@ -293,6 +324,8 @@ void showHardwareSettings() {
 
   uint8_t sel = 0;
   bool needRedraw = true;
+  MenuState_enum hwMenuState = ITEM_SELECTION;
+  uint16_t tempPwmProfile = 0;
   uint32_t lastInteraction = millis();
   bool screensaverActive = false;
   uint16_t screensaverEncoderPos = (uint16_t)readUiEncoder();
@@ -345,33 +378,58 @@ void showHardwareSettings() {
 
     if (g_rotaryEncoder.encoderChanged()) {
       lastInteraction = millis();
-      sel = (uint8_t)readUiEncoder();
+      if (hwMenuState == ITEM_SELECTION) {
+        sel = (uint8_t)readUiEncoder();
+      } else {
+        tempPwmProfile = (uint16_t)readUiEncoder();
+      }
       needRedraw = true;
     }
 
     if (g_rotaryEncoder.isEncoderButtonClicked()) {
       lastInteraction = millis();
-      if (sel == itemBack) {
-        break;
-      } else if (sel == itemEncInv) {
-        applyEncoderInvertSetting(g_encoderInvertEnabled ? 0 : 1);
-        saveEEPROM(g_storedVar);
+      if (hwMenuState == VALUE_SELECTION) {
+        /* Confirm PWM MAX edit */
+        if (applyConfiguredPwmFreqMaxProfile(tempPwmProfile)) {
+          initMenuItems();
+          saveEEPROM(g_storedVar);
+        }
+        hwMenuState = ITEM_SELECTION;
+        g_rotaryEncoder.setAcceleration(MENU_ACCELERATION);
+        setUiEncoderBoundaries(0, HARDWARE_ITEMS_COUNT - 1, false);
+        resetUiEncoder(sel);
         needRedraw = true;
-      } else if (sel == itemExtPot) {
-        showExtPotSettings();
-        if (isEscapeToMainRequested()) break;
-        resumeAfterChild();
-        continue;
-      } else if (sel == itemTrigger) {
-        showTriggerSensorSettings();
-        if (isEscapeToMainRequested()) break;
-        resumeAfterChild();
-        continue;
-      } else if (sel == itemTest) {
-        showSelfTest();
-        if (isEscapeToMainRequested()) break;
-        resumeAfterChild();
-        continue;
+      } else {
+        if (sel == itemBack) {
+          break;
+        } else if (sel == itemEncInv) {
+          applyEncoderInvertSetting(g_encoderInvertEnabled ? 0 : 1);
+          saveEEPROM(g_storedVar);
+          needRedraw = true;
+        } else if (sel == itemExtPot) {
+          showExtPotSettings();
+          if (isEscapeToMainRequested()) break;
+          resumeAfterChild();
+          continue;
+        } else if (sel == itemTrigger) {
+          showTriggerSensorSettings();
+          if (isEscapeToMainRequested()) break;
+          resumeAfterChild();
+          continue;
+        } else if (sel == itemPwmMax) {
+          /* Enter VALUE_SELECTION */
+          hwMenuState = VALUE_SELECTION;
+          tempPwmProfile = getConfiguredPwmFreqMaxProfile();
+          g_rotaryEncoder.setAcceleration(SEL_ACCELERATION);
+          setUiEncoderBoundaries(PWM_FREQ_MAX_PROFILE_5K, PWM_FREQ_MAX_PROFILE_20K, false);
+          resetUiEncoder(tempPwmProfile);
+          needRedraw = true;
+        } else if (sel == itemTest) {
+          showSelfTest();
+          if (isEscapeToMainRequested()) break;
+          resumeAfterChild();
+          continue;
+        }
       }
       delay(200);
     }
@@ -382,8 +440,18 @@ void showHardwareSettings() {
       if (!brakeBtnInMenu && millis() - lastBrakeBtnTime > BUTTON_SHORT_PRESS_DEBOUNCE_MS) {
         brakeBtnInMenu = true;
         lastBrakeBtnTime = millis();
-        while (digitalRead(BUTT_PIN) == BUTTON_PRESSED) { vTaskDelay(5); }
-        break;
+        if (hwMenuState == VALUE_SELECTION) {
+          /* Cancel - discard edit */
+          hwMenuState = ITEM_SELECTION;
+          g_rotaryEncoder.setAcceleration(MENU_ACCELERATION);
+          setUiEncoderBoundaries(0, HARDWARE_ITEMS_COUNT - 1, false);
+          resetUiEncoder(sel);
+          obdFill(&g_obd, OBD_WHITE, 1);
+          needRedraw = true;
+        } else {
+          while (digitalRead(BUTT_PIN) == BUTTON_PRESSED) { vTaskDelay(5); }
+          break;
+        }
       }
     } else {
       brakeBtnInMenu = false;
@@ -395,25 +463,37 @@ void showHardwareSettings() {
       needRedraw = false;
       uint8_t lang = g_storedVar.language;
       char familyBuf[16];
+      char pwmMaxBuf[8];
       HAL_GetTriggerSensorFamilyLabel(familyBuf, sizeof(familyBuf));
+      uint16_t displayProfile = (hwMenuState == VALUE_SELECTION) ? tempPwmProfile : getConfiguredPwmFreqMaxProfile();
+      snprintf(pwmMaxBuf, sizeof(pwmMaxBuf), "%uk", (unsigned int)pwmFreqMaxProfileToWholeKHz(displayProfile));
 
       for (uint8_t i = 0; i < HARDWARE_ITEMS_COUNT; i++) {
-        bool isSelected = (sel == i);
+        bool isNameSel  = (sel == i && hwMenuState == ITEM_SELECTION);
+        bool isValueSel = (sel == i && hwMenuState == VALUE_SELECTION);
         const char* label = (i == itemBack)
           ? getBackLabel(lang)
           : getHardwareMenuLabel(lang, i);
         obdWriteString(&g_obd, 0, 0, i * lineH, (char*)label,
-                       menuFont, isSelected ? OBD_WHITE : OBD_BLACK, 1);
+                       menuFont, isNameSel ? OBD_WHITE : OBD_BLACK, 1);
 
         const char* value = nullptr;
         if (i == itemEncInv) {
           value = getOnOffLabel(lang, g_encoderInvertEnabled ? 1 : 0);
         } else if (i == itemTrigger) {
           value = familyBuf;
+        } else if (i == itemPwmMax) {
+          value = pwmMaxBuf;
         }
 
         if (value != nullptr && value[0] != '\0') {
-          drawRightAlignedValue(i * lineH, value, isSelected, (i == itemEncInv) ? 3 : 8);
+          uint8_t fieldChars = 8;
+          if (i == itemEncInv) {
+            fieldChars = 3;
+          } else if (i == itemPwmMax) {
+            fieldChars = 3;
+          }
+          drawRightAlignedValue(i * lineH, value, isNameSel || isValueSel, fieldChars);
         }
       }
     }

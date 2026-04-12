@@ -17,8 +17,8 @@
 
 /* Firmware Version */
 #define SW_MAJOR_VERSION 6
-#define SW_MINOR_VERSION 9
-#define SW_PATCH_VERSION 2
+#define SW_MINOR_VERSION 10
+#define SW_PATCH_VERSION 0
 
 /* Stored Variable Version */
 #define STORED_VAR_VERSION 24 /* Increment when stored value scale/format changes */
@@ -27,9 +27,11 @@
 #define MENU_ITEMS_COUNT    12    /* Number of possible items in main menu (including optional STATS, LOCK and CAR) */
 #define SETTINGS_ITEMS_COUNT 12   /* Number of items in settings menu (including BACK) */
 #define POWER_ITEMS_COUNT    6    /* Number of items in power submenu (SCRSV, SLEEP, D-SLEEP, STARTUP, VIN CAL., BACK) */
-#define DISPLAY_ITEMS_COUNT  7    /* Number of items in display submenu (VIEW, LANG, CASE, FSIZE, STEPS, STATUS, BACK) */
+#define DISPLAY_ITEMS_COUNT  8    /* Number of items in display submenu (VIEW, LANG, CASE, FSIZE, ADVANCED, STEPS, STATUS, BACK) */
 #define STEPS_ITEMS_COUNT    4    /* Number of items in steps submenu (ANTISPIN, BRAKE STEP, SENSI STEP, BACK) */
-#define HARDWARE_ITEMS_COUNT 5    /* Number of items in hardware submenu (ENC INV, EXT POT, TRIGGER, TEST, BACK) */
+#define HARDWARE_ITEMS_COUNT 6    /* Number of items in hardware submenu (ENC INV, EXT POT, TRIGGER, PWM MAX, TEST, BACK) */
+#define MAIN_MENU_BASE_TUNING_ITEMS 4 /* BRAKE, SENSI, ANTIS, CURVE always stay before optional advanced items */
+#define MAIN_MENU_ADVANCED_ITEMS    3 /* FADE, PWM_F and BRAKE+ are hidden when ADVANCED is OFF */
 #define POWER_SAVE_TIMEOUT_DEFAULT 5    /* [min] Default auto power save delay (0=manual only) */
 #define POWER_SAVE_TIMEOUT_MAX     10   /* [min] Maximum auto power save delay */
 #define DEEP_SLEEP_TIMEOUT_DEFAULT 10   /* [min] Default auto deep sleep delay (0=manual only) */
@@ -44,6 +46,16 @@
 /* View Modes */
 #define VIEW_MODE_LIST      0     /* List view (classic menu) */
 #define VIEW_MODE_GRID      1     /* Grid view (race mode) */
+
+/* Display submenu item indexes */
+#define DISPLAY_ITEM_VIEW_IDX      0
+#define DISPLAY_ITEM_LANG_IDX      1
+#define DISPLAY_ITEM_CASE_IDX      2
+#define DISPLAY_ITEM_FSIZE_IDX     3
+#define DISPLAY_ITEM_ADVANCED_IDX  4
+#define DISPLAY_ITEM_STEPS_IDX     5
+#define DISPLAY_ITEM_STATUS_IDX    6
+#define DISPLAY_ITEM_BACK_IDX      7
 
 /* Race Mode View Types */
 #define RACE_VIEW_OFF       0     /* No race mode (list view only) */
@@ -73,6 +85,7 @@
 #define ANTISPIN_STEP_DEFAULT      5    /* [ms] Default encoder step when editing ANTIS */
 #define ANTISPIN_STEP_PCT_DEFAULT  1    /* [%] Default encoder step when editing ANTIS in percent mode */
 #define ANTISPIN_UI_MODE_DEFAULT   0    /* Default ANTIS UI/edit scale = ms */
+#define ADVANCED_MENU_ENABLED_DEFAULT 1 /* Display menu toggle for showing FADE/PWM_F/BRAKE+ in the main menu */
 #define ENCODER_INVERT_DEFAULT     0    /* Encoder rotation follows default hardware direction */
 #define MAX_SPEED_DEFAULT         100   /* [%] Maximum motor speed */
 #define THROTTLE_CURVE_INPUT_THROTTLE_DEFAULT   (THROTTLE_NORMALIZED / 2)  /* Throttle curve vertex X */
@@ -87,7 +100,7 @@
 /* Parameter Limits */
 #define MIN_SPEED_MAX_VALUE       900   /* [0.1%] 90.0% max sensitivity */
 #define DRAG_MAX_VALUE            100   /* [%] Maximum drag brake */
-#define FREQ_MAX_VALUE            5000  /* [Hz] Maximum PWM frequency */
+#define FREQ_MAX_VALUE           20000  /* [Hz] Absolute PWM frequency ceiling supported by firmware */
 #define BRAKE_MAX_VALUE          1000   /* [0.1%] Maximum brake strength */
 #define THROTTLE_CURVE_SPEED_DIFF_MAX_VALUE  90   /* [%] Throttle curve max */
 #define THROTTLE_CURVE_SPEED_DIFF_MIN_VALUE  10   /* [%] Throttle curve min */
@@ -106,6 +119,10 @@
 #define SENSI_STEP_MIN              1   /* [0.1% raw] Minimum sensi step (0.1%) */
 #define SENSI_STEP_MAX             50   /* [0.1% raw] Maximum sensi step (5.0%) */
 #define FREQ_MIN_VALUE            1000  /* [Hz] Minimum PWM frequency */
+#define PWM_FREQ_MAX_PROFILE_5K      0  /* Soft PWM ceiling = 5 kHz */
+#define PWM_FREQ_MAX_PROFILE_10K     1  /* Soft PWM ceiling = 10 kHz */
+#define PWM_FREQ_MAX_PROFILE_20K     2  /* Soft PWM ceiling = 20 kHz */
+#define PWM_FREQ_MAX_PROFILE_DEFAULT PWM_FREQ_MAX_PROFILE_5K
 #define QUICK_BRAKE_THRESHOLD_MAX 50    /* [%] Maximum quick brake threshold */
 #define QUICK_BRAKE_STRENGTH_MAX  100   /* [%] Maximum quick brake strength */
 #define RELEASE_BRAKE_OFF          0    /* Release brake disabled */
@@ -205,6 +222,41 @@ static inline const char* antiSpinTextLevelToLabel(uint16_t level) {
   }
 }
 
+static inline uint16_t pwmFreqMaxProfileToRaw(uint16_t profile) {
+  switch (profile) {
+    case PWM_FREQ_MAX_PROFILE_10K:
+      return 100U;  /* 10.0 kHz in [100*Hz] units */
+    case PWM_FREQ_MAX_PROFILE_20K:
+      return 200U;  /* 20.0 kHz in [100*Hz] units */
+    case PWM_FREQ_MAX_PROFILE_5K:
+    default:
+      return 50U;   /* 5.0 kHz in [100*Hz] units */
+  }
+}
+
+static inline uint16_t pwmFreqMaxProfileToWholeKHz(uint16_t profile) {
+  switch (profile) {
+    case PWM_FREQ_MAX_PROFILE_10K:
+      return 10U;
+    case PWM_FREQ_MAX_PROFILE_20K:
+      return 20U;
+    case PWM_FREQ_MAX_PROFILE_5K:
+    default:
+      return 5U;
+  }
+}
+
+static inline uint16_t normalizePwmFreqMaxProfile(uint16_t profile) {
+  return (profile > PWM_FREQ_MAX_PROFILE_20K) ? PWM_FREQ_MAX_PROFILE_DEFAULT : profile;
+}
+
+static inline uint16_t clampPwmFreqRawToProfile(uint16_t freqRaw, uint16_t profile) {
+  uint16_t maxRaw = pwmFreqMaxProfileToRaw(normalizePwmFreqMaxProfile(profile));
+  if (freqRaw < (FREQ_MIN_VALUE / 100U)) return (FREQ_MIN_VALUE / 100U);
+  if (freqRaw > maxRaw) return maxRaw;
+  return freqRaw;
+}
+
 /* Display Font Sizes */
 #define HEIGHT12x16     16
 #define HEIGHT8x8       8
@@ -243,7 +295,7 @@ void applyAdcVoltageRangeMilliVolts(uint16_t range_mV);
 #define LOCK_CONFIRM_DEFAULT       0  /* Hide fullscreen confirmation flash by default */
 #define GRID_CAR_SELECT_DEFAULT 1  /* Grid car select (RACESWP): 0=OFF, 1=ON */
 #define STATS_ENABLED_DEFAULT    0  /* Hide STATS menu item by default */
-#define EXT_POT_COUNT            2  /* Two optional external ADC pots: GPIO35 and GPIO15 */
+#define EXT_POT_COUNT            2  /* Two optional external ADC pots: GPIO39 and GPIO35 */
 #define EXT_POT_TARGET_OFF       0
 #define EXT_POT_TARGET_BRAKE     1
 #define EXT_POT_TARGET_SENSI     2
@@ -296,12 +348,13 @@ void applyAdcVoltageRangeMilliVolts(uint16_t range_mV);
 #define STATUS_VOLTAGE  5   /* Input voltage (5 chars, e.g. " 3.7V") */
 #define STATUS_CURRENT_MA  6   /* Legacy stored value; normalized to STATUS_CURRENT */
 #define STATUS_ACTIVE_BRAKE 7   /* Active brake type/value (5 chars, e.g. "Q060%") */
+#define STATUS_BATTERY  8   /* Battery voltage (5 chars, e.g. "4.1VB") */
 
 static inline uint16_t normalizeStatusSlotValue(uint16_t slotValue) {
   if (slotValue == STATUS_CURRENT_MA) return STATUS_CURRENT;
-  return (slotValue <= STATUS_ACTIVE_BRAKE) ? slotValue : STATUS_BLANK;
+  return (slotValue <= STATUS_BATTERY) ? slotValue : STATUS_BLANK;
 }
-/* Default slot assignments: OUTPUT | CAR | VOLTAGE | blank */
+/* Default slot assignments: OUTPUT | THROTTLE | CAR | VOLTAGE */
 #define STATUS_SLOT0_DEFAULT STATUS_OUTPUT
 #define STATUS_SLOT1_DEFAULT STATUS_THROTTLE
 #define STATUS_SLOT2_DEFAULT STATUS_CAR
@@ -342,6 +395,8 @@ long readUiEncoder();
 void resetUiEncoder(long logicalValue);
 void setUiEncoderBoundaries(long minValue, long maxValue, bool circleValues);
 void applyEncoderInvertSetting(uint16_t enabled);
+void applyAdvancedMenuSetting(uint16_t enabled);
+void resetEncoderForMainMenu();
 
 /**
  * @brief Menu navigation states
@@ -422,6 +477,12 @@ typedef struct {
   uint16_t lockConfirmEnabled;       /* Show fullscreen LOCKED/UNLOCKED flash: 0=OFF, 1=ON */
 } StoredVar_type;
 
+bool clampStoredVarCarPwmFreqsToProfile(StoredVar_type* storedVar, uint16_t profile);
+uint16_t getConfiguredPwmFreqMaxProfile();
+uint16_t getConfiguredPwmFreqMaxRaw();
+uint16_t getConfiguredPwmFreqMaxKHz();
+bool applyConfiguredPwmFreqMaxProfile(uint16_t profile);
+
 /**
  * @brief ESC runtime variables
  * @details Real-time state variables updated during operation
@@ -432,6 +493,7 @@ typedef struct {
   uint16_t trigger_norm;      /* Normalized trigger value (0-THROTTLE_NORMALIZED) */
   uint16_t encoderPos;        /* Current rotary encoder position */
   uint16_t Vin_mV;            /* [mV] Input voltage */
+  uint16_t Bat_mV;            /* [mV] Internal battery voltage */
   uint16_t motorCurrent_mA;   /* [mA] Motor current */
   uint16_t effectiveBrake_raw; /* [0.1%] Active brake value after external overrides */
   uint16_t effectiveSensi_raw; /* [0.1%] Active SENSI value after external overrides */

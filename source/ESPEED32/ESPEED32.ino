@@ -87,8 +87,10 @@ uint16_t g_antiSpinStepPct = ANTISPIN_STEP_PCT_DEFAULT; /* Global encoder step w
 uint16_t g_antiSpinDisplayMode = ANTISPIN_UI_MODE_DEFAULT; /* Global ANTIS display/edit mode: ms, %, or text */
 uint16_t g_brakeStep = BRAKE_STEP_DEFAULT;   /* Global encoder step when editing BRAKE [raw units = 0.1% each] */
 uint16_t g_sensiStep = SENSI_STEP_DEFAULT;   /* Global encoder step when editing SENSI [raw units = 0.1% each] */
+uint16_t g_advancedMenuEnabled = ADVANCED_MENU_ENABLED_DEFAULT; /* Main-menu visibility for FADE/PWM_F/BRAKE+: 0=hidden, 1=shown */
 uint16_t g_encoderInvertEnabled = ENCODER_INVERT_DEFAULT; /* Global encoder direction: 0=default, 1=inverted */
 uint16_t g_adcVoltageRange_mV = ACD_VOLTAGE_RANGE_DEFAULT_MVOLTS; /* Global ADC voltage scale used for VIN/current conversion */
+uint16_t g_pwmFreqMaxProfile = PWM_FREQ_MAX_PROFILE_DEFAULT; /* Global soft PWM ceiling: 5/10/20 kHz */
 
 /* ESC Runtime Variables */
 ESC_type g_escVar {
@@ -97,6 +99,7 @@ ESC_type g_escVar {
   .trigger_norm = 0,
   .encoderPos = 1,
   .Vin_mV = 0,
+  .Bat_mV = 0,
   .motorCurrent_mA = 0,
   .effectiveBrake_raw = BRAKE_DEFAULT,
   .effectiveSensi_raw = MIN_SPEED_DEFAULT,
@@ -164,8 +167,10 @@ static const char* PREF_KEY_ANTIS_STEP_PCT = "antis_pct_v1"; /* persistent ANTIS
 static const char* PREF_KEY_ANTIS_MODE = "antis_mode_v1";  /* persistent ANTIS display/edit mode */
 static const char* PREF_KEY_BRAKE_STEP = "brake_step_v1";  /* persistent BRAKE encoder step */
 static const char* PREF_KEY_SENSI_STEP = "sensi_step_v1";  /* persistent SENSI encoder step */
+static const char* PREF_KEY_ADVANCED_MENU = "adv_menu_v1"; /* persistent ADVANCED main-menu visibility toggle */
 static const char* PREF_KEY_ENC_INVERT = "enc_inv_v1";     /* persistent encoder inversion toggle */
 static const char* PREF_KEY_ADC_RANGE = "adc_rng_mv_v1";   /* persistent ADC voltage calibration */
+static const char* PREF_KEY_PWM_FREQ_MAX = "pwm_f_max_v1"; /* persistent soft PWM max profile */
 static const char* PREF_KEY_EXT_POT1_TARGET = "ext_pot1_tgt";
 static const char* PREF_KEY_EXT_POT2_TARGET = "ext_pot2_tgt";
 static const char* PREF_KEY_EXT_POT_ENABLED_LEGACY = "ext_pot_en";
@@ -231,6 +236,38 @@ void applyEncoderInvertSetting(uint16_t enabled) {
   resetUiEncoder(logicalValue);
 }
 
+static uint8_t remapMainMenuSelectorForAdvancedToggle(uint8_t selector, bool oldEnabled, bool newEnabled) {
+  if (oldEnabled == newEnabled) {
+    return selector;
+  }
+
+  if (!oldEnabled && newEnabled) {
+    if (selector > MAIN_MENU_BASE_TUNING_ITEMS) {
+      selector = (uint8_t)(selector + MAIN_MENU_ADVANCED_ITEMS);
+    }
+    return selector;
+  }
+
+  if (selector > (MAIN_MENU_BASE_TUNING_ITEMS + MAIN_MENU_ADVANCED_ITEMS)) {
+    selector = (uint8_t)(selector - MAIN_MENU_ADVANCED_ITEMS);
+  } else if (selector > MAIN_MENU_BASE_TUNING_ITEMS) {
+    selector = (uint8_t)(MAIN_MENU_BASE_TUNING_ITEMS + 1U); /* Collapse hidden FADE/PWM_F/BRAKE+ to LIMIT. */
+  }
+  return selector;
+}
+
+void applyAdvancedMenuSetting(uint16_t enabled) {
+  bool oldEnabled = g_advancedMenuEnabled != 0U;
+  bool newEnabled = enabled != 0U;
+  if (oldEnabled == newEnabled) {
+    return;
+  }
+
+  g_encoderMainSelector = remapMainMenuSelectorForAdvancedToggle(g_encoderMainSelector, oldEnabled, newEnabled);
+  g_advancedMenuEnabled = newEnabled ? 1U : 0U;
+  initMenuItems();
+}
+
 static bool isAntiSpinEditTarget() {
   return g_encoderSelectedValuePtr == &g_storedVar.carParam[g_carSel].antiSpin;
 }
@@ -241,6 +278,40 @@ static bool isBrakeEditTarget() {
 
 static bool isSensiEditTarget() {
   return g_encoderSelectedValuePtr == &g_storedVar.carParam[g_carSel].minSpeed;
+}
+
+bool clampStoredVarCarPwmFreqsToProfile(StoredVar_type* storedVar, uint16_t profile) {
+  if (storedVar == nullptr) return false;
+
+  bool changed = false;
+  for (uint8_t i = 0; i < CAR_MAX_COUNT; i++) {
+    uint16_t clamped = clampPwmFreqRawToProfile(storedVar->carParam[i].freqPWM, profile);
+    if (storedVar->carParam[i].freqPWM != clamped) {
+      storedVar->carParam[i].freqPWM = clamped;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+uint16_t getConfiguredPwmFreqMaxProfile() {
+  return normalizePwmFreqMaxProfile(g_pwmFreqMaxProfile);
+}
+
+uint16_t getConfiguredPwmFreqMaxRaw() {
+  return pwmFreqMaxProfileToRaw(getConfiguredPwmFreqMaxProfile());
+}
+
+uint16_t getConfiguredPwmFreqMaxKHz() {
+  return pwmFreqMaxProfileToWholeKHz(getConfiguredPwmFreqMaxProfile());
+}
+
+bool applyConfiguredPwmFreqMaxProfile(uint16_t profile) {
+  uint16_t normalized = normalizePwmFreqMaxProfile(profile);
+  bool changed = (g_pwmFreqMaxProfile != normalized);
+  g_pwmFreqMaxProfile = normalized;
+  bool clampedCars = clampStoredVarCarPwmFreqsToProfile(&g_storedVar, g_pwmFreqMaxProfile);
+  return changed || clampedCars;
 }
 
 static uint16_t ceilDivU16(uint16_t value, uint16_t divisor) {
@@ -477,6 +548,7 @@ uint8_t getMainMenuSelector() {
 
 uint8_t getMainMenuItemsCount() {
   uint8_t count = MENU_ITEMS_COUNT;
+  if (!g_advancedMenuEnabled) count -= MAIN_MENU_ADVANCED_ITEMS;
   if (!g_statsEnabled) count--;
   if (!g_storedVar.lockMenuEnabled) count--;
   return count;
@@ -702,7 +774,10 @@ void Task1code(void *pvParameters) {
               migratedToTenths = true;
             }
             g_statsEnabled = g_pref.getUChar(PREF_KEY_STATS_ENABLED, STATS_ENABLED_DEFAULT) ? 1 : 0;
+            g_advancedMenuEnabled = g_pref.getUChar(PREF_KEY_ADVANCED_MENU, ADVANCED_MENU_ENABLED_DEFAULT) ? 1 : 0;
             g_encoderInvertEnabled = g_pref.getUChar(PREF_KEY_ENC_INVERT, ENCODER_INVERT_DEFAULT) ? 1 : 0;
+            g_pwmFreqMaxProfile = normalizePwmFreqMaxProfile(
+              g_pref.getUChar(PREF_KEY_PWM_FREQ_MAX, PWM_FREQ_MAX_PROFILE_DEFAULT));
             applyAdcVoltageRangeMilliVolts(g_pref.getUShort(PREF_KEY_ADC_RANGE, ACD_VOLTAGE_RANGE_DEFAULT_MVOLTS));
             if (g_pref.isKey(PREF_KEY_EXT_POT1_TARGET) || g_pref.isKey(PREF_KEY_EXT_POT2_TARGET)) {
               g_extPotTarget[0] = constrain(g_pref.getUChar(PREF_KEY_EXT_POT1_TARGET, EXT_POT1_TARGET_DEFAULT),
@@ -758,6 +833,9 @@ void Task1code(void *pvParameters) {
               g_pref.putBool(PREF_KEY_SENSI_HALF, true);
               g_pref.putUShort(PREF_KEY_BRAKE_STEP, g_brakeStep);
               g_pref.putUShort(PREF_KEY_SENSI_STEP, g_sensiStep);
+            }
+            if (clampStoredVarCarPwmFreqsToProfile(&g_storedVar, g_pwmFreqMaxProfile)) {
+              g_pref.putBytes("user_param", &g_storedVar, sizeof(g_storedVar));
             }
             initMenuItems();                                                  /* init menu items with EEPROM stored variables */
             g_startWiFiAfterOtaBoot = consumeWiFiAutoStartOnNextBootRequest();
@@ -844,7 +922,9 @@ void Task1code(void *pvParameters) {
         g_pref.putUChar(PREF_KEY_ANTIS_MODE, ANTISPIN_UI_MODE_DEFAULT);
         g_pref.putUShort(PREF_KEY_BRAKE_STEP, BRAKE_STEP_DEFAULT);
         g_pref.putUShort(PREF_KEY_SENSI_STEP, SENSI_STEP_DEFAULT);
+        g_pref.putUChar(PREF_KEY_ADVANCED_MENU, ADVANCED_MENU_ENABLED_DEFAULT);
         g_pref.putUChar(PREF_KEY_ENC_INVERT, ENCODER_INVERT_DEFAULT);
+        g_pref.putUChar(PREF_KEY_PWM_FREQ_MAX, PWM_FREQ_MAX_PROFILE_DEFAULT);
         g_pref.putUShort(PREF_KEY_ADC_RANGE, ACD_VOLTAGE_RANGE_DEFAULT_MVOLTS);
         g_pref.putUChar(PREF_KEY_EXT_POT1_TARGET, EXT_POT1_TARGET_DEFAULT);
         g_pref.putUChar(PREF_KEY_EXT_POT2_TARGET, EXT_POT2_TARGET_DEFAULT);
@@ -858,6 +938,8 @@ void Task1code(void *pvParameters) {
         g_antiSpinDisplayMode = ANTISPIN_UI_MODE_DEFAULT;
         g_brakeStep = BRAKE_STEP_DEFAULT;
         g_sensiStep = SENSI_STEP_DEFAULT;
+        g_advancedMenuEnabled = ADVANCED_MENU_ENABLED_DEFAULT;
+        g_pwmFreqMaxProfile = PWM_FREQ_MAX_PROFILE_DEFAULT;
         applyAdcVoltageRangeMilliVolts(ACD_VOLTAGE_RANGE_DEFAULT_MVOLTS);
         g_extPotTarget[0] = EXT_POT1_TARGET_DEFAULT;
         g_extPotTarget[1] = EXT_POT2_TARGET_DEFAULT;
@@ -1655,6 +1737,7 @@ uint16_t saturateParamValue(uint16_t paramValue, uint16_t minValue, uint16_t max
 
 void saveEEPROM(StoredVar_type toSave) {
   g_pref.begin("stored_var", false);                      /* Open the "stored" namespace in read/write mode */
+  clampStoredVarCarPwmFreqsToProfile(&toSave, g_pwmFreqMaxProfile);
   g_pref.putBytes("user_param", &toSave, sizeof(toSave)); /* Put the value of the stored user_param */
   g_pref.putUChar(PREF_KEY_STATS_ENABLED, g_statsEnabled ? 1 : 0);
   g_pref.putUShort(PREF_KEY_ANTIS_STEP, constrain(g_antiSpinStepMs, ANTISPIN_STEP_MIN, ANTISPIN_STEP_MAX));
@@ -1662,7 +1745,9 @@ void saveEEPROM(StoredVar_type toSave) {
   g_pref.putUChar(PREF_KEY_ANTIS_MODE, constrain(g_antiSpinDisplayMode, ANTISPIN_UI_MODE_MS, ANTISPIN_UI_MODE_TEXT));
   g_pref.putUShort(PREF_KEY_BRAKE_STEP, constrain(g_brakeStep, BRAKE_STEP_MIN, BRAKE_STEP_MAX));
   g_pref.putUShort(PREF_KEY_SENSI_STEP, constrain(g_sensiStep, SENSI_STEP_MIN, SENSI_STEP_MAX));
+  g_pref.putUChar(PREF_KEY_ADVANCED_MENU, g_advancedMenuEnabled ? 1 : 0);
   g_pref.putUChar(PREF_KEY_ENC_INVERT, g_encoderInvertEnabled ? 1 : 0);
+  g_pref.putUChar(PREF_KEY_PWM_FREQ_MAX, getConfiguredPwmFreqMaxProfile());
   g_pref.putUShort(PREF_KEY_ADC_RANGE, constrain(g_adcVoltageRange_mV, ADC_VOLTAGE_RANGE_MIN_MVOLTS, ADC_VOLTAGE_RANGE_MAX_MVOLTS));
   g_pref.putUChar(PREF_KEY_EXT_POT1_TARGET, constrain(g_extPotTarget[0], EXT_POT_TARGET_MIN, EXT_POT_TARGET_MAX));
   g_pref.putUChar(PREF_KEY_EXT_POT2_TARGET, constrain(g_extPotTarget[1], EXT_POT_TARGET_MIN, EXT_POT_TARGET_MAX));

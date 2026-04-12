@@ -241,6 +241,7 @@ details.doc-fold>:not(summary){margin-top:8px}
       <li><code>ACD</code>: ACD-stil der det finnes direkte treff (<code>SENSI</code> og <code>CHOKE</code> for limit). <code>ANTIS</code> beholdes som antispinn siden ACD-manualen ikke bruker en egen Choke2-term.</li>
       <li><code>DISPLAY -&gt; CASE</code> velger om etiketter vises i <code>UPPER</code> eller <code>Pascal</code>.</li>
       <li><code>DISPLAY -&gt; FONT SIZE</code> velger mellom <code>LARGE</code> og <code>small</code> for liste- og menyvisning.</li>
+      <li><code>SKJERM -&gt; AVANSERT</code> velger om <code>FADE</code>, <code>PWM_F</code> og <code>BREMS+</code> vises i hovedmenyen. Setter du den til <code>AV</code>, skjules disse radene for en enklere meny, men de lagrede bilverdiene er fortsatt aktive.</li>
       <li><code>SKJERM -&gt; STEG</code> åpner steg-undermenyen som inneholder ANTISPINN, BREMSSTEG og SENSISTEG.</li>
       <li><code>SKJERM -&gt; STEG -&gt; ANTISPINN</code> åpner antispinn-innstillingsmenyen der du velger visningsenhet (<code>MS</code> / <code>%</code> / <code>TEXT</code>) og encoder-steg for hver enhet.</li>
       <li><code>SKJERM -&gt; STEG -&gt; BREMSSTEG</code> setter hvor mange prosent encoder flytter BREMS per klikk (0,1–50,0%, standard 1,0%). Konfigureres i <code>INNSTILLING → SKJERM → STEG → BREMSSTEG</code>.</li>
@@ -262,7 +263,8 @@ details.doc-fold>:not(summary){margin-top:8px}
     </figure>
     <h3>Statuslinje og ABOUT</h3>
     <ul>
-      <li><code>STATUS BAR</code>: 4 faste felter. Hvert felt kan vise <code>OUT%</code>, <code>GASS</code>, <code>BIL</code>, <code>AMPE</code>, <code>VOLT</code>, <code>BREMS</code> eller blankt. <code>AMPE</code> viser mA under 1000 og A over.</li>
+      <li><code>STATUS BAR</code>: 4 faste felter. Hvert felt kan vise <code>OUT%</code>, <code>GASS</code>, <code>BIL</code>, <code>AMPE</code>, <code>VOLT</code>, <code>VBAT</code>, <code>BREMS</code> eller blankt. <code>AMPE</code> viser mA under 1000 og A over.</li>
+      <li><code>VBAT</code> viser spenningen paa det valgfrie interne batteriet. I standard board-profil bruker denne maalingen <code>GPIO15</code> / ADC2, saa verdien kan slutte aa oppdatere mens WiFi er aktiv.</li>
       <li><code>BREMS</code> i statuslinjen viser aktiv bremsetype og verdi i sanntid: <code>Bxxx%</code> = vanlig <code>BRAKE</code>, <code>Axxx%</code> = <code>Alt.Brake</code>, <code>Qxxx%</code> = <code>Rel.Brake QUICK</code>, <code>Dxxx%</code> = <code>Rel.Brake DRAG</code>, <code>NONE</code> = ingen brems er aktiv akkurat da. Koden kan veksle raskt mens du kjorer.</li>
       <li>Når WiFi er aktivt vises <code>WIFI</code> i statuslinjen. Først brukes ledig felt; hvis ingen er ledige overstyres felt 4 midlertidig.</li>
       <li><code>ABOUT</code> viser firmware/data-versjon, detektert trigger-sensor, chip-info, flash/heap, MAC-adresser og build-dato/tid.</li>
@@ -271,7 +273,7 @@ details.doc-fold>:not(summary){margin-top:8px}
 
   <section>
     <h2>4. CAR-meny og Car Params</h2>
-    <p class="small"><code>CAR</code> styrer bilprofilene. Hver profil lagrer sine egne <code>Car Params</code>, altså kjøreverdier som <code>BRAKE</code>, <code>SENSI</code>, <code>ANTIS</code>, <code>CURVE</code>, <code>FADE</code>, <code>PWM_F</code>, <code>BREMS+</code> og <code>LIMIT</code>. Det er samme parametergruppe du møter igjen senere i <code>Advanced Config Editor</code>.</p>
+    <p class="small"><code>CAR</code> styrer bilprofilene. Hver profil lagrer sine egne <code>Car Params</code>, altså kjøreverdier som <code>BRAKE</code>, <code>SENSI</code>, <code>ANTIS</code>, <code>CURVE</code>, <code>FADE</code>, <code>PWM_F</code>, <code>BREMS+</code> og <code>LIMIT</code>. Det er samme parametergruppe du møter igjen senere i <code>Advanced Config Editor</code>. Hvis <code>SKJERM -&gt; AVANSERT</code> er satt til <code>AV</code>, skjules <code>FADE</code>, <code>PWM_F</code> og <code>BREMS+</code> i hovedmenyen, men de lagrede profilverdiene virker fortsatt.</p>
     <ul>
       <li><code>SELECT</code>: velg aktiv bilprofil (0-19).</li>
       <li><code>RENAME</code>: 4-tegns navn (ASCII 32-122), redigert tegn for tegn. Se <a href="https://slatecave.net/notebook/ascii/" target="_blank" rel="noopener noreferrer">ASCII-tabell</a>.</li>
@@ -328,7 +330,7 @@ details.doc-fold>:not(summary){margin-top:8px}
         <tr><td><code>ANTIS</code></td><td>0-999 ms</td><td>30</td><td>Antispinn-rampetid over lavfarts-bypass. Høyere verdi = lengre/tregere effektoppbygging. Det er ikke ren trigger-delay. Visningsenhet og encoder-steg konfigureres i <code>SKJERM -&gt; STEG -&gt; ANTISPINN</code> (MS / % / TEXT).</td></tr>
         <tr><td><code>CURVE</code></td><td>10-90 %</td><td>50</td><td>Gasskurve. 50 = lineær. &lt;50 mykere start, &gt;50 skarpere start.</td></tr>
         <tr><td><code>FADE</code></td><td>0-30 %</td><td>0</td><td>Myk startsone. 0 = av / gammel oppføring. Over 0 rampes første del av triggeren fra 0 opp til SENSI før vanlig CURVE tar over.</td></tr>
-        <tr><td><code>PWM_F</code></td><td>1.0-5.0 kHz</td><td>4.0</td><td>PWM-frekvens til motor. Høyere frekvens gir ofte mykere lavgass.</td></tr>
+        <tr><td><code>PWM_F</code></td><td>1.0-5.0 / 10.0 / 20.0 kHz</td><td>4.0</td><td>PWM-frekvens til motor. Området følger <code>SETTINGS -&gt; HARDWARE -&gt; PWM MAX</code> (5/10/20 kHz). Høyere frekvens gir ofte mykere lavgass.</td></tr>
         <tr><td><code>BREMS+ / Alt.brems</code></td><td>0-100 %</td><td>0</td><td>Alternativ brems som brukes mens bremseknapp holdes inne og trigger er sluppet.</td></tr>
         <tr><td><code>BREMS+ / Rel.brems</code></td><td>OFF/QUICK(sone+nivå)/DRAG(nivå)</td><td>OFF</td><td>Release-brems når trigger slippes. QUICK bruker null-output-sone; DRAG legger inn drag uten sone.</td></tr>
         <tr><td><code>LIMIT</code></td><td>(SENSI+5)-100 %</td><td>100</td><td>Maks motoreffekt. Ved &lt;100 vises LIMITER-varsling.</td></tr>
@@ -467,6 +469,7 @@ details.doc-fold>:not(summary){margin-top:8px}
       <li><code>ENC INV</code>: snur encoder-retningen globalt hvis menyen føles bakvendt.</li>
       <li><code>EKST POT</code>: tildel <code>POT 1</code> og <code>POT 2</code> til <code>AV</code>, <code>BREMS</code> eller <code>SENSI</code> som live-overstyringer.</li>
       <li><code>TRIGGER</code>: viser trigger-sensorfamilie og aktiv type. På <code>TLE493D</code>-builds kan du også overstyre <code>TYPE</code> mellom <code>AUTO</code>, <code>W2B6</code>, <code>W2B6_A0</code> og <code>P3B6</code>.</li>
+      <li><code>PWM MAX</code>: global maks for <code>PWM_F</code>. Velg 5, 10 eller 20 kHz. Senker du den, begrenses alle bilprofiler ned til denne grensen.</li>
       <li><code>TEST</code>: kjører 9-trinns selvtest for OLED, knapper, trigger og utganger.</li>
     </ul>
     <h3>Anslått strømforbruk (kontroller-elektronikk)</h3>
@@ -578,9 +581,9 @@ details.doc-fold>:not(summary){margin-top:8px}
 |- SENSI
 |- ANTIS
 |- CURVE (grafvisning)
-|- FADE (grafvisning)
-|- PWM_F
-|- BREMS+
+|- FADE (grafvisning, AVANSERT=PA)
+|- PWM_F (AVANSERT=PA)
+|- BREMS+ (AVANSERT=PA)
 |  |- Alt.brems (%)
 |  |- Rel.brems (OFF/QUICK/DRAG)
 |  |- Sone (%) [kun QUICK]
@@ -612,6 +615,7 @@ details.doc-fold>:not(summary){margin-top:8px}
 |  |  |- LANGUAGE (NOR/ENG/CS/ACD/ESP/DEU/ITA/NLD/POR)
 |  |  |- CASE (UPPER/Pascal)
 |  |  |- FONT SIZE (LARGE/small)
+|  |  |- AVANSERT (AV/PA)
 |  |  |- STEG
 |  |  |  |- ANTISPINN
 |  |  |  |  |- REG.TYPE (MS / % / TEXT, standard MS)
@@ -643,6 +647,7 @@ details.doc-fold>:not(summary){margin-top:8px}
 |  |  |  |- AKTIV
 |  |  |  |- TYPE (AUTO/W2B6/W2B6_A0/P3B6) [kun TLE493D]
 |  |  |  `- TILBAKE
+|  |  |- PWM MAX (5/10/20 kHz)
 |  |  |- TEST (Self-Test, 9 steg)
 |  |  `- TILBAKE
 |  |- STATS (AV/PÅ, default AV)
