@@ -629,11 +629,32 @@ form{margin:0}
 }
 .progress-head{
   display:flex;
+  align-items:flex-start;
+  flex-wrap:wrap;
   justify-content:space-between;
   gap:10px;
   font-size:12px;
   color:var(--progress-head);
   margin-bottom:6px;
+}
+.update-panel,
+.update-actions,
+.progress-wrap,
+.progress-head,
+.progress-head span{
+  min-width:0;
+}
+.update-panel .tiny,
+.update-panel .warn,
+.progress-head span{
+  overflow-wrap:break-word;
+  word-break:normal;
+}
+.progress-head span:first-child{
+  flex:1 1 180px;
+}
+.progress-head span:last-child{
+  flex:0 0 auto;
 }
 .progress-track{
   width:100%;
@@ -1124,8 +1145,8 @@ form{margin:0}
 <button id="btn-telemetry-refresh" class="btn doc" type="button" onclick="telemetryRefresh()">Refresh Status</button>
 </div>
 <div class="telemetry-actions telemetry-secondary-actions">
-<a id="btn-telemetry-export-csv" class="btn dl" href="/api/telemetry/export.csv" download="espeed32-telemetry.csv">Export CSV</a>
-<a id="btn-telemetry-export-json" class="btn ota" href="/api/telemetry/export.json" download="espeed32-telemetry.json">Export JSON</a>
+<a id="btn-telemetry-export-csv" class="btn dl" href="#" download="espeed32-telemetry.csv">Export CSV</a>
+<a id="btn-telemetry-export-json" class="btn ota" href="#" download="espeed32-telemetry.json">Export JSON</a>
 </div>
 <div class="telemetry-config">
 <div class="row">
@@ -1252,12 +1273,8 @@ form{margin:0}
 <option value="">Loading latest...</option>
 </select>
 </div>
-<p id="fw-release-note" class="tiny">Choose which official release automatic update should install. Firmware variant is matched to this controller's HAL Sensor when release metadata provides one.</p>
-<p id="fw-release-source" class="tiny" style="display:none"></p>
+<p class="tiny"><span id="fw-release-note">Release pair to install.</span> <span id="fw-release-source" style="display:none"></span></p>
 <button type="button" class="btn dl" id="btn-fw-auto" onclick="autoUpdateFirmware()">Install Selected Release</button>
-<p id="fw-auto-desc" class="tiny">Downloads the selected release pair, uploads firmware first and filesystem second, then reboots once at the end.</p>
-<p class="tiny">Recommended when you want a matched official release without downloading files manually.</p>
-<p class="tiny warn">Automatic update now tries to match firmware to this controller's HAL Sensor. If no matching firmware variant exists for the selected release, automatic firmware update is blocked and you must use Manual Update with the matching sensor-specific firmware file and the SPIFFS file from the same release.</p>
 </div>
 <p id="ota-note" style="display:none" class="warn"></p>
 <div id="auto-fw-progress" class="progress-wrap" aria-live="polite">
@@ -1355,9 +1372,19 @@ var telemetryFetchBusy=false;
 var telemetryUiBusy=false;
 var telemetryPollTimer=null;
 var telemetryPollIntervalMs=250;
-var telemetryLastError='';
+var telemetryPersistentError='';
+var telemetryPanelPinned=false;
 var telemetryRedrawQueued=false;
 var telemetryConfigSnapshot=null;
+var telemetryFetchAbortControllers=new Set();
+var telemetryPollingPausedByError=false;
+var telemetryLastSuccessAtMs=0;
+var telemetryLastErrorAtMs=0;
+var TELEMETRY_USB_LIVE_LIMIT=96;
+var TELEMETRY_WIFI_LIVE_LIMIT=16;
+var TELEMETRY_WIFI_TAIL_SAMPLES=64;
+var TELEMETRY_WIFI_MAX_FETCH_LOOPS=4;
+var TELEMETRY_USB_MAX_FETCH_LOOPS=20;
 var LAP_OVERLAY_SOURCE_NONE='none';
 var LAP_OVERLAY_SOURCE_CURRENT='current';
 var LAP_OVERLAY_SOURCE_IMPORT='import';
@@ -1618,7 +1645,7 @@ function renderControllerAbout(){
   }else if(infoLoadedFromUsb){
     note.textContent='Hosted copy: live controller details loaded over USB WebSerial.';
   }else if(hostedMode){
-    note.textContent='Hosted copy: connect to controller WiFi or USB to load live hardware, MAC, build, and network details.';
+    note.textContent='Hosted copy: connect to controller WiFi or USB to load this.';
   }else{
     note.textContent='Loading controller details...';
   }
@@ -2057,18 +2084,18 @@ function getSelectedReleaseInstallPlan(entry){
 function describeAutoUpdatePlan(entry,plan){
   var selectedLabel=formatSelectedReleaseLabel(entry);
   if(plan.canCompare && !plan.needsFirmware && !plan.needsSpiffs){
-    return 'Selected release '+selectedLabel+' is already installed on this controller.';
+    return selectedLabel+' is already installed.';
   }
   if(plan.canCompare && !plan.needsFirmware && plan.needsSpiffs){
-    return 'Firmware already matches '+selectedLabel+'. Automatic update will download and install only the filesystem/UI image, then reboot once at the end.';
+    return 'Installs filesystem/UI only for '+selectedLabel+'.';
   }
   if(plan.canCompare && plan.needsFirmware && !plan.needsSpiffs){
-    return 'Filesystem/UI already matches '+selectedLabel+'. Automatic update will download and install only the firmware image, then reboot once at the end.';
+    return 'Installs firmware only for '+selectedLabel+'.';
   }
   if(entry && !entry.isLatest){
-    return 'Downloads release '+selectedLabel+', uploads firmware first and filesystem second, then reboots once at the end.';
+    return 'Installs '+selectedLabel+'. Firmware first, filesystem second, one reboot.';
   }
-  return 'Downloads the selected official release pair, uploads firmware first and filesystem second, then reboots once at the end.';
+  return 'Installs selected release pair. One reboot.';
 }
 
 function updateReleaseVersionUi(){
@@ -2085,8 +2112,8 @@ function updateReleaseVersionUi(){
     select.appendChild(loadingOpt);
     select.disabled=true;
     note.textContent=releaseFetchTried
-      ?'Version list unavailable right now. Automatic update will use the latest available release pair.'
-      :'Checks available releases and defaults to the latest version.';
+      ?'Using latest available release.'
+      :'Loading release list...';
     source.style.display='none';
     source.textContent='';
     return;
@@ -2107,12 +2134,12 @@ function updateReleaseVersionUi(){
   var plan=getSelectedReleaseInstallPlan(selected);
   var singleLatestFallback=(availableReleases.length<2 && selected && selected.version==='latest');
   note.textContent=singleLatestFallback
-    ?'Version list unavailable right now. Automatic update will use the latest available release pair.'
-    :'This selector controls which firmware + filesystem pair automatic update installs.';
+    ?'Using latest available release.'
+    :'Release pair to install.';
 
   if(selected && selected.source){
-    source.style.display='block';
-    source.appendChild(document.createTextNode('Source release: '));
+    source.style.display='inline';
+    source.appendChild(document.createTextNode('Source: '));
     var link=document.createElement('a');
     link.href=selected.source;
     link.target='_blank';
@@ -2482,11 +2509,64 @@ function telemetryUnavailableText(){
   return 'Telemetry is available on the controller WiFi page or over USB WebSerial.';
 }
 
+async function telemetryHydrateStatusFromDevice(){
+  if(!telemetryAvailable()) return false;
+  try{
+    var status=await telemetryFetchStatusTransport();
+    telemetryStatus=status;
+    if(status && (status.loggingActive || status.hasData)){
+      telemetryPanelPinned=true;
+    }
+    telemetryPersistentError='';
+    updateTelemetryUiState();
+    updateTelemetryMetrics();
+    drawTelemetryPlot();
+    return true;
+  }catch(_){
+    return false;
+  }
+}
+
+async function telemetryFetchWithTimeout(url,options,timeoutMs){
+  if(typeof AbortController==='undefined'){
+    return await fetch(url,options||{});
+  }
+  var controller=new AbortController();
+  telemetryFetchAbortControllers.add(controller);
+  var requestOptions=Object.assign({},options||{});
+  requestOptions.signal=controller.signal;
+  var timedOut=false;
+  var timer=setTimeout(function(){
+    timedOut=true;
+    controller.abort();
+  },Math.max(1000,Number(timeoutMs||10000)));
+  try{
+    return await fetch(url,requestOptions);
+  }catch(err){
+    if(err && err.name==='AbortError'){
+      throw new Error(timedOut?'Telemetry request timed out':'Telemetry request cancelled');
+    }
+    throw err;
+  }finally{
+    telemetryFetchAbortControllers.delete(controller);
+    clearTimeout(timer);
+  }
+}
+
+function cancelTelemetryFetches(){
+  if(!telemetryFetchAbortControllers.size) return;
+  var snapshot=Array.from(telemetryFetchAbortControllers);
+  telemetryFetchAbortControllers.clear();
+  snapshot.forEach(function(c){
+    try{ c.abort(); }catch(_){}
+  });
+}
+
 async function telemetryFetchStatusTransport(){
   if(telemetryUsesUsb()){
     return await usbReadJsonResponse('TSTATUS',10000,40000);
   }
-  var resp=await fetch('/api/telemetry/status',{cache:'no-store'});
+  var resp=await telemetryFetchWithTimeout('/api/telemetry/status',{cache:'no-store'},8000);
   if(!resp.ok) throw new Error('Telemetry unavailable (HTTP '+resp.status+')');
   var data=await resp.json();
   if(!data || !data.ok) throw new Error((data&&data.error)?data.error:'Telemetry fetch failed');
@@ -2495,13 +2575,25 @@ async function telemetryFetchStatusTransport(){
 
 async function telemetryFetchLiveTransport(after,limit){
   if(telemetryUsesUsb()){
-    var usbLimit=Math.min(Number(limit||256),96);
+    var usbLimit=Math.min(Number(limit||256),TELEMETRY_USB_LIVE_LIMIT);
     return await usbReadJsonResponse('TLIVE '+String(after||0)+' '+String(usbLimit),15000,120000);
   }
-  var resp=await fetch('/api/telemetry/live?after='+encodeURIComponent(after||0)+'&limit='+encodeURIComponent(limit||256),{cache:'no-store'});
+  var wifiLimit=Math.min(Number(limit||256),TELEMETRY_WIFI_LIVE_LIMIT);
+  var resp=await telemetryFetchWithTimeout('/api/telemetry/live?after='+encodeURIComponent(after||0)+'&limit='+encodeURIComponent(wifiLimit),{cache:'no-store'},10000);
   if(!resp.ok) throw new Error('Telemetry unavailable (HTTP '+resp.status+')');
   var data=await resp.json();
   if(!data || !data.ok) throw new Error((data&&data.error)?data.error:'Telemetry fetch failed');
+  return data;
+}
+
+async function telemetryFetchEventsTransport(){
+  if(telemetryUsesUsb()){
+    return await usbReadJsonResponse('TEVENTS',15000,120000);
+  }
+  var resp=await telemetryFetchWithTimeout('/api/telemetry/events',{cache:'no-store'},10000);
+  if(!resp.ok) throw new Error('Telemetry events unavailable (HTTP '+resp.status+')');
+  var data=await resp.json();
+  if(!data || !data.ok) throw new Error((data&&data.error)?data.error:'Telemetry events fetch failed');
   return data;
 }
 
@@ -2510,7 +2602,7 @@ async function telemetryPostTransport(action){
     return await usbReadJsonResponse(action,15000,40000);
   }
   var url='/api/telemetry/'+action.toLowerCase().slice(1);
-  var resp=await fetch(url,{method:'POST'});
+  var resp=await telemetryFetchWithTimeout(url,{method:'POST'},10000);
   var data=await resp.json();
   if(!resp.ok || !data.ok) throw new Error((data&&data.error)?data.error:('HTTP '+resp.status));
   return data;
@@ -2520,7 +2612,11 @@ async function telemetryLoadConfigSnapshot(){
   if(telemetryConfigSnapshot) return telemetryConfigSnapshot;
   if(telemetryUsesUsb()){
     telemetryConfigSnapshot=await usbReadJsonResponse('TCONFIG',15000,120000);
+    return telemetryConfigSnapshot;
   }
+  var resp=await telemetryFetchWithTimeout('/api/telemetry/config',{cache:'no-store'},10000);
+  if(!resp.ok) throw new Error('Telemetry config unavailable (HTTP '+resp.status+')');
+  telemetryConfigSnapshot=await resp.json();
   return telemetryConfigSnapshot;
 }
 
@@ -2563,56 +2659,92 @@ function telemetryDownloadBlob(blob,fileName){
   },1000);
 }
 
-async function telemetryFetchExportBlob(format){
-  var url=(format==='csv')?'/api/telemetry/export.csv':'/api/telemetry/export.json';
-  var resp=await fetch(url,{cache:'no-store'});
-  if(!resp.ok){
-    var errText='';
-    try{ errText=await resp.text(); }catch(_){}
-    throw new Error(errText||('Telemetry export failed (HTTP '+resp.status+')'));
-  }
-  return await resp.blob();
+function telemetryEventsWereTruncated(status){
+  return !!(status && (status.eventsTruncated || status.eventTruncated));
 }
 
-async function telemetryCollectExportData(){
+function telemetryFilterEventsForSnapshot(events,targetLatestEventId,targetLatestSeq){
+  if(!Array.isArray(events)) return [];
+  return events.filter(function(event){
+    var eventId=Number((event&&event.id)||0);
+    var sampleSeq=Number((event&&event.sampleSeq)||0);
+    if(targetLatestEventId>0 && eventId>targetLatestEventId) return false;
+    if(targetLatestSeq>0 && sampleSeq>targetLatestSeq) return false;
+    return true;
+  });
+}
+
+async function telemetryCollectExportData(includeEvents){
   var snapshot=null;
-  if(telemetryUsesUsb()){
+  try{
     snapshot=await telemetryLoadConfigSnapshot();
+  }catch(_){
+    snapshot=null;
   }
 
-  var samples=[];
-  var events=[];
   var restarts=0;
+  var batchLimit=telemetryUsesUsb()?TELEMETRY_USB_LIVE_LIMIT:TELEMETRY_WIFI_LIVE_LIMIT;
 
   while(restarts<3){
-    var after=0;
-    var sessionId=0;
-    var restarted=false;
-    samples=[];
-    events=[];
+    var statusSeed=await telemetryFetchStatusTransport();
+    if(!statusSeed || !statusSeed.hasData){
+      return {status:statusSeed||null,snapshot:snapshot,samples:[],events:[]};
+    }
 
-    for(var safety=0;safety<32;safety++){
-      var data=await telemetryFetchLiveTransport(after,256);
+    var targetSessionId=Number(statusSeed.sessionId||0);
+    var targetLatestSeq=Number(statusSeed.latestSeq||0);
+    var targetLatestEventId=Number(statusSeed.latestEventId||0);
+    var targetSamples=Math.max(
+      1,
+      Number(statusSeed.storedCount||0),
+      Number(statusSeed.capacity||0)
+    );
+    var maxBatches=Math.max(32,Math.ceil(targetSamples/Math.max(1,batchLimit))+16);
+    var after=0;
+    var restarted=false;
+    var samples=[];
+    var fallbackEvents=[];
+    var fallbackEventsTruncated=false;
+
+    for(var safety=0;safety<maxBatches;safety++){
+      var data=await telemetryFetchLiveTransport(after,batchLimit);
       if(!data || !data.ok) throw new Error('Telemetry export failed');
       if(!data.hasData) return {status:data,snapshot:snapshot,samples:[],events:[]};
 
-      if((sessionId && Number(data.sessionId||0)!==sessionId) || (data.truncated && after!==0)){
+      if(Number(data.sessionId||0)!==targetSessionId || (data.truncated && after!==0)){
         restarts++;
         restarted=true;
         break;
       }
 
-      sessionId=Number(data.sessionId||0);
-      events=Array.isArray(data.events)?data.events:[];
-      if(Array.isArray(data.samples)){
-        data.samples.forEach(function(sample){
-          samples.push(sample);
-          after=Number(sample[TELEMETRY_FIELDS.SEQ]||after);
-        });
+      if(after===0 && Array.isArray(data.events) && data.events.length){
+        fallbackEvents=data.events.slice();
+        fallbackEventsTruncated=telemetryEventsWereTruncated(data);
       }
 
-      if(!data.hasMore){
-        return {status:data,snapshot:snapshot,samples:samples,events:events};
+      var reachedTarget=false;
+      if(Array.isArray(data.samples)){
+        var beforeCount=samples.length;
+        data.samples.forEach(function(sample){
+          var seq=Number(sample[TELEMETRY_FIELDS.SEQ]||0);
+          if(seq<=0) return;
+          if(targetLatestSeq>0 && seq>targetLatestSeq){
+            reachedTarget=true;
+            return;
+          }
+          samples.push(sample);
+          after=seq;
+          if(targetLatestSeq>0 && seq>=targetLatestSeq){
+            reachedTarget=true;
+          }
+        });
+        if(data.hasMore && samples.length===beforeCount && !reachedTarget){
+          throw new Error('Telemetry export stalled before all samples were fetched');
+        }
+      }
+
+      if(reachedTarget || !data.hasMore){
+        break;
       }
     }
 
@@ -2620,7 +2752,39 @@ async function telemetryCollectExportData(){
       continue;
     }
 
-    throw new Error('Telemetry export exceeded expected batch count');
+    if(targetLatestSeq>0 && after<targetLatestSeq){
+      restarts++;
+      continue;
+    }
+
+    var events=[];
+    var eventsTruncated=false;
+    if(includeEvents && targetLatestEventId>0){
+      try{
+        var eventsData=await telemetryFetchEventsTransport();
+        if(Number(eventsData.sessionId||0)!==targetSessionId){
+          restarts++;
+          continue;
+        }
+        events=telemetryFilterEventsForSnapshot(eventsData.events,targetLatestEventId,targetLatestSeq);
+        eventsTruncated=telemetryEventsWereTruncated(eventsData);
+      }catch(e){
+        events=telemetryFilterEventsForSnapshot(fallbackEvents,targetLatestEventId,targetLatestSeq);
+        eventsTruncated=fallbackEventsTruncated;
+        if(!events.length){
+          throw e;
+        }
+      }
+    }
+
+    var exportStatus=Object.assign({},statusSeed,{
+      storedCount:samples.length,
+      latestSeq:targetLatestSeq,
+      latestEventId:targetLatestEventId,
+      eventTruncated:!!eventsTruncated,
+      eventsTruncated:!!eventsTruncated
+    });
+    return {status:exportStatus,snapshot:snapshot,samples:samples,events:events};
   }
 
   throw new Error('Telemetry export could not stabilize while logging. Stop logging and try again.');
@@ -2670,7 +2834,7 @@ function telemetryBuildJsonExport(samples,status,snapshot,events){
     sessionStartMs:Number((status && status.sessionStartMs)||0),
     sessionStartCarIndex:Number((status && status.sessionStartCarIndex)||0),
     configAtStart:snapshot||null,
-    eventsTruncated:!!(status && status.eventTruncated),
+    eventsTruncated:telemetryEventsWereTruncated(status),
     events:Array.isArray(events)?events:[],
     samples:samples.map(function(sample){
       return {
@@ -2703,37 +2867,31 @@ async function telemetryExport(format){
 
   try{
     var baseName=telemetryGetExportBaseName();
-    var exportData=null;
-    if(telemetryUsesUsb()){
-      exportData=await telemetryCollectExportData();
-      if(!exportData.samples.length){
-        throw new Error('No telemetry data available');
-      }
-
-      if(format==='csv'){
-        telemetryDownloadBlob(
-          new Blob([telemetryBuildCsvExport(exportData.samples,exportData.snapshot)],{type:'text/csv;charset=utf-8'}),
-          baseName+'.csv'
-        );
-      }else{
-        telemetryDownloadBlob(
-          new Blob([JSON.stringify(telemetryBuildJsonExport(exportData.samples,exportData.status,exportData.snapshot,exportData.events),null,2)],{type:'application/json;charset=utf-8'}),
-          baseName+'.json'
-        );
-      }
-
-      telemetryStatus=exportData.status||telemetryStatus;
-      telemetryEvents=Array.isArray(exportData.events)?exportData.events:telemetryEvents;
-    }else{
-      telemetryDownloadBlob(await telemetryFetchExportBlob(format),baseName+(format==='csv'?'.csv':'.json'));
+    var exportData=await telemetryCollectExportData(format==='json');
+    if(!exportData.samples.length){
+      throw new Error('No telemetry data available');
     }
-    telemetryLastError='';
+
+    if(format==='csv'){
+      telemetryDownloadBlob(
+        new Blob([telemetryBuildCsvExport(exportData.samples,exportData.snapshot)],{type:'text/csv;charset=utf-8'}),
+        baseName+'.csv'
+      );
+    }else{
+      telemetryDownloadBlob(
+        new Blob([JSON.stringify(telemetryBuildJsonExport(exportData.samples,exportData.status,exportData.snapshot,exportData.events),null,2)],{type:'application/json;charset=utf-8'}),
+        baseName+'.json'
+      );
+    }
+
+    telemetryStatus=exportData.status||telemetryStatus;
+    telemetryEvents=Array.isArray(exportData.events)?exportData.events:telemetryEvents;
+    telemetryPersistentError='';
     updateTelemetryMetrics();
     drawTelemetryPlot();
     ss('tst','ok','Telemetry '+String(format||'').toUpperCase()+' exported');
   }catch(e){
-    telemetryLastError=normalizeTelemetryError(e);
-    ss('tst','err',telemetryLastError);
+    ss('tst','err',normalizeTelemetryError(e));
   }finally{
     telemetryUiBusy=false;
     updateTelemetryUiState();
@@ -2746,6 +2904,15 @@ function normalizeTelemetryError(err){
   if(!message) return 'Telemetry is unavailable on this page.';
   if(message==='The string did not match the expected pattern.'){
     return 'Telemetry is unavailable on this page.';
+  }
+  if(message==='Load failed'){
+    return 'Telemetry live update dropped. Live polling was paused so the page does not overload the controller. Press Refresh Status to retry.';
+  }
+  if(message==='Telemetry request timed out'){
+    return 'Telemetry live update timed out. Live polling was paused so the page does not overload the controller. Press Refresh Status to retry.';
+  }
+  if(message==='Telemetry request cancelled'){
+    return 'Telemetry was paused so the firmware update could start cleanly.';
   }
   if(message.indexOf('Failed to fetch')!==-1){
     return 'Telemetry is unavailable on this page.';
@@ -2793,8 +2960,11 @@ function startTelemetryPollingIfAvailable(refreshNow){
   stopTelemetryPolling();
   if(otaBusy && !telemetryUsesUsb()) return;
   if(!telemetryAvailable()) return;
+  if(telemetryPollingPausedByError && !refreshNow) return;
+  if(refreshNow) telemetryPollingPausedByError=false;
   if(refreshNow) syncTelemetryHistory(true,true);
-  telemetryPollTimer=setInterval(function(){ syncTelemetryHistory(false,true); },telemetryPollIntervalMs);
+  var intervalMs=telemetryUsesUsb()?telemetryPollIntervalMs:Math.max(1000,telemetryPollIntervalMs);
+  telemetryPollTimer=setInterval(function(){ syncTelemetryHistory(false,true); },intervalMs);
 }
 
 function setAnchorDisabled(id,disabled,href){
@@ -2899,6 +3069,8 @@ function telemetryBuildEventLabel(event){
 function updateTelemetryAvailabilityNote(){
   var note=document.getElementById('telemetry-note');
   if(!note) return;
+  var recoveredSinceError=telemetryLastSuccessAtMs>0 && telemetryLastSuccessAtMs>=telemetryLastErrorAtMs;
+  var status=telemetryStatus||{};
   if(telemetryUsesUsb()){
     note.style.display='none';
     note.textContent='';
@@ -2908,9 +3080,9 @@ function updateTelemetryAvailabilityNote(){
   }else if(!infoLoadedFromApi){
     note.style.display='block';
     note.textContent='Telemetry becomes available when this UI is served by the controller WiFi API, or when USB WebSerial is connected.';
-  }else if(telemetryLastError){
+  }else if(telemetryPersistentError && !recoveredSinceError && !(status.loggingActive && telemetrySamples.length>0)){
     note.style.display='block';
-    note.textContent=telemetryLastError;
+    note.textContent=telemetryPersistentError;
   }else{
     note.style.display='none';
     note.textContent='';
@@ -2919,7 +3091,7 @@ function updateTelemetryAvailabilityNote(){
 
 function telemetryShouldShowDetails(){
   var status=telemetryStatus||{};
-  return !!(status.loggingActive || status.hasData || telemetrySamples.length);
+  return !!(telemetryPanelPinned || telemetryUiBusy || status.loggingActive || status.hasData || telemetrySamples.length);
 }
 
 function updateTelemetryLayout(){
@@ -2993,8 +3165,8 @@ function updateTelemetryUiState(){
     btn.classList.toggle('disabled',!!btn.disabled);
   });
 
-  setAnchorDisabled('btn-telemetry-export-csv',!available || !hasData,telemetryUsesUsb()?'#':'/api/telemetry/export.csv');
-  setAnchorDisabled('btn-telemetry-export-json',!available || !hasData,telemetryUsesUsb()?'#':'/api/telemetry/export.json');
+  setAnchorDisabled('btn-telemetry-export-csv',!available || !hasData,'#');
+  setAnchorDisabled('btn-telemetry-export-json',!available || !hasData,'#');
   updateTelemetryAvailabilityNote();
   updateTelemetryLayout();
 }
@@ -3530,6 +3702,10 @@ function lapOverlayAnalyze(silent){
 }
 
 async function lapOverlayUseCurrentTelemetry(){
+  if(!telemetryAvailable()){
+    ss('lapst','err',telemetryUnavailableText());
+    return;
+  }
   lapOverlaySourceKind=LAP_OVERLAY_SOURCE_CURRENT;
   if(!telemetrySamples.length && telemetryAvailable()){
     try{
@@ -3537,8 +3713,12 @@ async function lapOverlayUseCurrentTelemetry(){
     }catch(_){}
   }
   lapOverlayRefreshFromCurrentTelemetry(false);
-  if(telemetryAvailable()){
+  var status=telemetryStatus||{};
+  var hasCurrentSource=!!(lapOverlaySamples.length || telemetrySamples.length || status.hasData || status.loggingActive);
+  if(hasCurrentSource && status.loggingActive){
     ss('lapst','ok','Using current telemetry buffer. Lap Overlay will update live while telemetry runs.');
+  }else if(hasCurrentSource){
+    ss('lapst','ok','Using current telemetry buffer.');
   }
 }
 
@@ -3775,7 +3955,7 @@ function initLapOverlayUi(){
   drawLapOverlayPlot();
 }
 
-async function syncTelemetryHistory(reset,silent){
+async function syncTelemetryHistory(reset,silent,persistError){
   if(otaBusy && !telemetryUsesUsb()){
     stopTelemetryPolling();
     return;
@@ -3787,7 +3967,8 @@ async function syncTelemetryHistory(reset,silent){
     telemetryEvents=[];
     telemetryAfterSeq=0;
     telemetrySessionId=0;
-    telemetryLastError='';
+    telemetryPersistentError='';
+    telemetryPanelPinned=false;
     lapOverlayRefreshFromCurrentTelemetry(true);
     updateTelemetryUiState();
     updateTelemetryMetrics();
@@ -3806,10 +3987,24 @@ async function syncTelemetryHistory(reset,silent){
       telemetryEvents=[];
       telemetryAfterSeq=0;
       telemetrySessionId=0;
+      if(!telemetryUsesUsb()){
+        var statusSeed=await telemetryFetchStatusTransport();
+        telemetryStatus=statusSeed;
+        telemetrySessionId=Number(statusSeed.sessionId||0);
+        var latestSeq=Number(statusSeed.latestSeq||0);
+        var oldestSeq=Number(statusSeed.oldestSeq||0);
+        var tailCount=Math.max(32,Math.min(TELEMETRY_WIFI_TAIL_SAMPLES,Number(statusSeed.capacity||TELEMETRY_WIFI_TAIL_SAMPLES)));
+        if(latestSeq>0){
+          var firstWanted=Math.max(1,latestSeq-tailCount+1);
+          if(oldestSeq>0 && firstWanted<oldestSeq) firstWanted=oldestSeq;
+          telemetryAfterSeq=firstWanted>1?(firstWanted-1):0;
+        }
+      }
     }
 
     var safety=0;
-    while(safety<20){
+    var maxLoops=telemetryUsesUsb()?TELEMETRY_USB_MAX_FETCH_LOOPS:TELEMETRY_WIFI_MAX_FETCH_LOOPS;
+    while(safety<maxLoops){
       var after=telemetryAfterSeq;
       var data=await telemetryFetchLiveTransport(after,256);
 
@@ -3826,7 +4021,9 @@ async function syncTelemetryHistory(reset,silent){
       }
 
       telemetryStatus=data;
-      telemetryEvents=Array.isArray(data.events)?data.events:[];
+      if(Array.isArray(data.events) && (after===0 || data.events.length>0)){
+        telemetryEvents=data.events;
+      }
       telemetrySessionId=Number(data.sessionId||0);
       if(Array.isArray(data.samples)){
         data.samples.forEach(function(sample){
@@ -3844,7 +4041,9 @@ async function syncTelemetryHistory(reset,silent){
       safety++;
     }
 
-    telemetryLastError='';
+    telemetryPersistentError='';
+    telemetryPollingPausedByError=false;
+    telemetryLastSuccessAtMs=Date.now();
     lapOverlayRefreshFromCurrentTelemetry(true);
     updateTelemetryMetrics();
     drawTelemetryPlot();
@@ -3852,9 +4051,15 @@ async function syncTelemetryHistory(reset,silent){
       ss('tst','ok','Telemetry refreshed');
     }
   }catch(e){
-    telemetryLastError=normalizeTelemetryError(e);
+    var errorText=normalizeTelemetryError(e);
+    telemetryPersistentError=(persistError===false)?'':errorText;
+    telemetryLastErrorAtMs=Date.now();
+    if(!telemetryUsesUsb() && errorText!=='Telemetry was paused so the firmware update could start cleanly.'){
+      telemetryPollingPausedByError=true;
+      stopTelemetryPolling();
+    }
     if(!silent){
-      ss('tst','err',telemetryLastError);
+      ss('tst','err',errorText);
     }
   }finally{
     telemetryFetchBusy=false;
@@ -3870,10 +4075,10 @@ async function telemetryPostAction(url,successText,resetHistory){
     ss('tst','err',telemetryUnavailableText());
     return;
   }
-  var hadUsbPolling=telemetryUsesUsb();
-  if(hadUsbPolling){
-    stopTelemetryPolling();
-  }
+  telemetryPanelPinned=true;
+  var hadPolling=!!telemetryPollTimer;
+  stopTelemetryPolling();
+  telemetryPollingPausedByError=false;
   telemetryUiBusy=true;
   updateTelemetryUiState();
   try{
@@ -3886,26 +4091,26 @@ async function telemetryPostAction(url,successText,resetHistory){
       telemetrySessionId=0;
       telemetryConfigSnapshot=null;
     }
-    telemetryLastError='';
+    telemetryPersistentError='';
     updateTelemetryUiState();
     updateTelemetryMetrics();
     drawTelemetryPlot();
-    await syncTelemetryHistory(!!resetHistory,true);
     ss('tst','ok',successText||data.message||'Done');
   }catch(e){
-    telemetryLastError=normalizeTelemetryError(e);
-    ss('tst','err',telemetryLastError);
+    ss('tst','err',normalizeTelemetryError(e));
   }finally{
     telemetryUiBusy=false;
     updateTelemetryUiState();
-    if(hadUsbPolling){
-      startTelemetryPollingIfAvailable(false);
+    if(hadPolling || telemetryAvailable()){
+      startTelemetryPollingIfAvailable(true);
     }
   }
 }
 
 async function telemetryRefresh(){
-  await syncTelemetryHistory(true,false);
+  telemetryPanelPinned=true;
+  telemetryPollingPausedByError=false;
+  await syncTelemetryHistory(true,false,false);
 }
 
 async function telemetryStart(){
@@ -3965,13 +4170,13 @@ function initTelemetryUi(){
 
 function otaUploadUnavailableReason(label){
   if(hostedMode){
-    return label+' unavailable in hosted mode. Open controller WiFi page to upload.';
+    return label+' unavailable in hosted mode. Open the live controller page to upload.';
   }
   if(usb){
-    return label+' unavailable while USB WebSerial is connected. Disconnect USB to use WiFi OTA.';
+    return label+' unavailable while USB WebSerial is connected. Disconnect USB to continue.';
   }
   if(!infoLoadedFromApi){
-    return label+' requires the live controller WiFi page.';
+    return label+' requires the live controller page.';
   }
   return '';
 }
@@ -3980,7 +4185,7 @@ function autoUpdateUnavailableReason(label,kind){
   var baseReason=otaUploadUnavailableReason(label);
   if(baseReason) return baseReason;
   if(Number(info.portalMode||0)!==2){
-    return label+' requires Client mode with internet access on this device.';
+    return label+' requires Client mode with internet access.';
   }
   return '';
 }
@@ -4054,14 +4259,13 @@ function updateFirmwareUiState(){
   var btn=document.getElementById('btn-ota-upload');
   var releaseSelect=document.getElementById('fw-release-select');
   var autoBtn=document.getElementById('btn-fw-auto');
-  var autoDesc=document.getElementById('fw-auto-desc');
   var note=document.getElementById('ota-note');
   var fsInput=document.getElementById('spiffs');
   var manualDesc=document.getElementById('spiffs-auto-desc');
   var fsNote=document.getElementById('spiffs-note');
-  if(!input || !btn || !releaseSelect || !autoBtn || !autoDesc || !note || !fsInput || !manualDesc || !fsNote) return;
+  if(!input || !btn || !releaseSelect || !autoBtn || !note || !fsInput || !manualDesc || !fsNote) return;
 
-  var busyReason=otaBusy?'Another update is already running. Wait for completion.':'';
+  var busyReason=otaBusy?'Firmware update in progress — please wait.':'';
   var manualBaseReason=busyReason || otaUploadUnavailableReason('Manual update');
   var selected=getSelectedReleaseMeta();
   var plan=getSelectedReleaseInstallPlan(selected);
@@ -4086,7 +4290,6 @@ function updateFirmwareUiState(){
   note.textContent=autoReason;
   autoBtn.disabled=autoDisabled;
   autoBtn.classList.toggle('disabled',autoDisabled);
-  autoDesc.textContent=autoReason || describeAutoUpdatePlan(selected,plan);
 
   fsNote.style.display=manualBaseReason!==''?'block':'none';
   fsNote.textContent=manualBaseReason;
@@ -4096,6 +4299,7 @@ function updateFirmwareUiState(){
 }
 
 function setUsbReadyState(ready,msg){
+  var hadPolling=!!telemetryPollTimer;
   usbReady=!!ready;
   var b=document.getElementById('ucb');
   if(b && usb){
@@ -4104,9 +4308,11 @@ function setUsbReadyState(ready,msg){
   updateDocsLinkState();
   updateFirmwareUiState();
   updateReleaseInfoUi();
-  if(usbReady) startTelemetryPollingIfAvailable(true);
-  else if(infoLoadedFromApi) startTelemetryPollingIfAvailable(false);
-  else stopTelemetryPolling();
+  if(!usbReady && !infoLoadedFromApi){
+    stopTelemetryPolling();
+  }else if(hadPolling){
+    startTelemetryPollingIfAvailable(false);
+  }
   updateTelemetryUiState();
   updateTelemetryMetrics();
   scheduleTelemetryPlotRedraw();
@@ -4162,9 +4368,10 @@ async function loadInfoFromUsb(){
 }
 
 async function loadInfo(){
+  var hadPolling=!!telemetryPollTimer;
   var apiOk=false;
   try{
-    var r=await fetch('/api/info',{cache:'no-store'});
+    var r=await telemetryFetchWithTimeout('/api/info',{cache:'no-store'},6000);
     if(r.ok){
       var j=await r.json();
       infoLoadedFromApi=true;
@@ -4177,7 +4384,11 @@ async function loadInfo(){
   applyHostedMode();
   applyInfo();
   if(apiOk){
-    startTelemetryPollingIfAvailable(true);
+    if(hadPolling){
+      startTelemetryPollingIfAvailable(false);
+    }else if(!otaBusy){
+      await telemetryHydrateStatusFromDevice();
+    }
   }else{
     stopTelemetryPolling();
   }
@@ -4214,6 +4425,7 @@ async function ws(s){
 }
 
 async function resetUsbToDisconnected(showStatus,statusType,statusMsg){
+  var hadPolling=!!telemetryPollTimer;
   usb=false;
   usbReady=false;
   infoLoadedFromUsb=false;
@@ -4240,10 +4452,10 @@ async function resetUsbToDisconnected(showStatus,statusType,statusMsg){
     telemetryEvents=[];
     telemetryAfterSeq=0;
     telemetrySessionId=0;
-    telemetryLastError='';
+    telemetryPersistentError='';
     lapOverlayRefreshFromCurrentTelemetry(true);
-  }else{
-    startTelemetryPollingIfAvailable(true);
+  }else if(hadPolling){
+    startTelemetryPollingIfAvailable(false);
   }
   updateTelemetryUiState();
   updateTelemetryMetrics();
@@ -4684,12 +4896,31 @@ function setOtaBusy(busy){
 async function pauseBackgroundActivityForOta(statusId){
   otaPausedTelemetryPolling=!!telemetryPollTimer;
   stopTelemetryPolling();
-  if(!telemetryFetchBusy) return;
+  cancelTelemetryFetches();
 
-  ss(statusId,'','Waiting for background requests to settle...');
+  ss(statusId,'','Pausing telemetry...');
   var deadline=Date.now()+3000;
   while(telemetryFetchBusy && Date.now()<deadline){
     await sleepMs(50);
+  }
+
+  if(telemetryFetchBusy){
+    throw new Error('Telemetry requests did not settle. Wait a moment and try the update again.');
+  }
+
+  if(!telemetryUsesUsb() && telemetryAvailable()){
+    await telemetryHydrateStatusFromDevice();
+  }
+
+  if(!telemetryUsesUsb() && telemetryStatus && telemetryStatus.loggingActive){
+    ss(statusId,'','Stopping telemetry logging...');
+    var stopData=await telemetryPostTransport('TSTOP');
+    telemetryStatus=stopData||telemetryStatus;
+    telemetryPersistentError='';
+    updateTelemetryUiState();
+    updateTelemetryMetrics();
+    drawTelemetryPlot();
+    await sleepMs(150);
   }
 }
 
@@ -4989,7 +5220,7 @@ async function runCombinedOtaUpdate(config){
 async function autoUpdateFirmware(){
   var selected=getSelectedReleaseMeta();
   var plan=getSelectedReleaseInstallPlan(selected);
-  var blocked=otaBusy?'Another update is already running. Wait for completion.':getAutoUpdateBlockedReason('Automatic update',selected,plan);
+  var blocked=otaBusy?'Firmware update in progress — please wait.':getAutoUpdateBlockedReason('Automatic update',selected,plan);
   var firmwareInfo=getReleaseDownloadInfo(selected,'firmware');
   var spiffsInfo=getReleaseDownloadInfo(selected,'spiffs');
   if(blocked){
@@ -5023,7 +5254,7 @@ async function autoUpdateFirmware(){
 }
 
 async function uploadSelectedUpdatePair(){
-  var blocked=otaBusy?'Another update is already running. Wait for completion.':otaUploadUnavailableReason('Manual update');
+  var blocked=otaBusy?'Firmware update in progress — please wait.':otaUploadUnavailableReason('Manual update');
   if(blocked){
     ss('manual-ota-status','err',blocked);
     return;
@@ -5056,7 +5287,7 @@ async function uploadSelectedUpdatePair(){
 }
 
 async function uploadSingleFirmware(){
-  var blocked=otaBusy?'Another update is already running. Wait for completion.':otaUploadUnavailableReason('Single firmware upload');
+  var blocked=otaBusy?'Firmware update in progress — please wait.':otaUploadUnavailableReason('Single firmware upload');
   if(blocked){ss('adv-ota-status','err',blocked);return;}
   var fwFile=document.getElementById('adv-fw').files[0];
   if(!fwFile){ss('adv-ota-status','err','Select a firmware .bin file first.');return;}
@@ -5069,7 +5300,7 @@ async function uploadSingleFirmware(){
 }
 
 async function uploadSingleSpiffs(){
-  var blocked=otaBusy?'Another update is already running. Wait for completion.':otaUploadUnavailableReason('Single filesystem upload');
+  var blocked=otaBusy?'Firmware update in progress — please wait.':otaUploadUnavailableReason('Single filesystem upload');
   if(blocked){ss('adv-ota-status','err',blocked);return;}
   var spiffsFile=document.getElementById('adv-spiffs').files[0];
   if(!spiffsFile){ss('adv-ota-status','err','Select a filesystem .bin file first.');return;}
@@ -5107,6 +5338,12 @@ document.getElementById('uf').onsubmit=async function(e){
 };
 
 document.getElementById('btn-fw-backup-modal-download').onclick=async function(){
+  try{
+    await pauseBackgroundActivityForOta(otaBackupPromptStatusId);
+  }catch(e){
+    ss(otaBackupPromptStatusId,'err',e.message);
+    return;
+  }
   await doBackup(otaBackupPromptStatusId);
   if(backupDownloadedThisSession) closeFirmwareBackupPrompt(true);
 };
@@ -5140,6 +5377,14 @@ if(typeof window!=='undefined'){
   window.addEventListener('online',updateFirmwareUiState);
   window.addEventListener('offline',updateFirmwareUiState);
   window.addEventListener('resize',scheduleTelemetryPlotRedraw);
+  window.addEventListener('pagehide',function(){
+    cancelTelemetryFetches();
+    stopTelemetryPolling();
+  });
+  window.addEventListener('beforeunload',function(){
+    cancelTelemetryFetches();
+    stopTelemetryPolling();
+  });
 }
 loadInfo();
 loadLatestReleaseInfo();

@@ -7,8 +7,14 @@
 #include "slot_ESC.h"
 
 #define TELEMETRY_SAMPLE_INTERVAL_MS 20U
-#define TELEMETRY_BUFFER_CAPACITY    3000U
-#define TELEMETRY_EVENT_BUFFER_CAPACITY 128U
+#define TELEMETRY_BUFFER_CAPACITY    3000U  /* Maximum sample capacity when enough heap is available */
+#define TELEMETRY_BUFFER_MIN_CAPACITY 512U /* Minimum useful sample capacity before start fails */
+#define TELEMETRY_BUFFER_ALLOC_STEP   128U /* Step-down size when adapting sample capacity to free heap */
+#define TELEMETRY_EVENT_BUFFER_CAPACITY 64U /* Maximum event capacity when enough heap is available */
+#define TELEMETRY_EVENT_BUFFER_MIN_CAPACITY 16U
+#define TELEMETRY_EVENT_BUFFER_ALLOC_STEP 16U
+#define TELEMETRY_HEAP_RESERVE_BYTES  65536U /* Keep headroom for WiFi/web/OTA while telemetry is active */
+#define TELEMETRY_HEAP_MIN_RESERVE_BYTES 49152U
 
 #define TELEMETRY_FLAG_BRAKE_BUTTON      0x01U
 #define TELEMETRY_FLAG_TRIGGER_RELEASING 0x02U
@@ -88,6 +94,7 @@ bool telemetryStartLogging(const StoredVar_type* storedVar,
                            uint16_t encoderInvertEnabled,
                            uint16_t adcVoltageRange_mV,
                            uint8_t activeCarIndex);
+const char* telemetryGetLastStartError();
 void telemetryStopLogging();
 void telemetryClear();
 bool telemetryIsLoggingActive();

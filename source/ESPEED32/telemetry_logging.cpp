@@ -6,6 +6,8 @@
 static portMUX_TYPE g_telemetryMux = portMUX_INITIALIZER_UNLOCKED;
 static TelemetrySample* g_telemetrySamples = nullptr;
 static TelemetryEvent* g_telemetryEvents = nullptr;
+static uint16_t g_telemetrySampleCapacity = 0;
+static uint16_t g_telemetryEventCapacity = 0;
 static TelemetryConfigSnapshot g_telemetryConfigSnapshot;
 static bool g_telemetryConfigValid = false;
 static bool g_telemetryLoggingActive = false;
@@ -23,9 +25,126 @@ static uint8_t g_telemetrySessionStartCarIndex = 0;
 static uint8_t g_telemetryLastSelectedCarIndex = 0;
 static bool g_telemetryLastActiveCarValid = false;
 static CarParam_type g_telemetryLastActiveCar;
+static char g_telemetryLastStartError[64] = "";
+
+static void telemetryCopyLastStartError(char* out, size_t outLen) {
+  if (out == nullptr || outLen == 0U) {
+    return;
+  }
+
+  portENTER_CRITICAL(&g_telemetryMux);
+  strncpy(out, g_telemetryLastStartError, outLen - 1U);
+  out[outLen - 1U] = '\0';
+  portEXIT_CRITICAL(&g_telemetryMux);
+}
+
+static void telemetrySetLastStartError(const char* msg) {
+  char localError[sizeof(g_telemetryLastStartError)];
+  if (msg == nullptr) msg = "";
+  strncpy(localError, msg, sizeof(localError) - 1U);
+  localError[sizeof(localError) - 1U] = '\0';
+
+  portENTER_CRITICAL(&g_telemetryMux);
+  memcpy(g_telemetryLastStartError, localError, sizeof(g_telemetryLastStartError));
+  portEXIT_CRITICAL(&g_telemetryMux);
+}
+
+static uint16_t telemetryAlignCapacityDown(uint16_t value, uint16_t step, uint16_t minimum) {
+  if (value <= minimum) {
+    return minimum;
+  }
+  if (step == 0U) {
+    return value;
+  }
+  uint16_t aligned = (uint16_t)((value / step) * step);
+  if (aligned < minimum) {
+    aligned = minimum;
+  }
+  return aligned;
+}
+
+static uint16_t telemetryStepCapacityDown(uint16_t value, uint16_t step, uint16_t minimum) {
+  if (value <= minimum) {
+    return minimum;
+  }
+  if (step == 0U || value <= (uint16_t)(minimum + step)) {
+    return minimum;
+  }
+  return (uint16_t)(value - step);
+}
+
+static TelemetrySample* telemetryAllocateSampleBuffer(uint16_t* outCapacity) {
+  if (outCapacity == nullptr) {
+    return nullptr;
+  }
+
+  *outCapacity = 0U;
+
+  size_t freeHeap = ESP.getFreeHeap();
+  size_t budgetBytes = 0U;
+  if (freeHeap > TELEMETRY_HEAP_RESERVE_BYTES) {
+    budgetBytes = freeHeap - TELEMETRY_HEAP_RESERVE_BYTES;
+  } else if (freeHeap > TELEMETRY_HEAP_MIN_RESERVE_BYTES) {
+    budgetBytes = freeHeap - TELEMETRY_HEAP_MIN_RESERVE_BYTES;
+  } else {
+    budgetBytes = freeHeap / 4U;
+  }
+
+  uint32_t requestedCapacity = (uint32_t)(budgetBytes / sizeof(TelemetrySample));
+  if (requestedCapacity > TELEMETRY_BUFFER_CAPACITY) {
+    requestedCapacity = TELEMETRY_BUFFER_CAPACITY;
+  }
+  if (requestedCapacity < TELEMETRY_BUFFER_MIN_CAPACITY) {
+    requestedCapacity = TELEMETRY_BUFFER_MIN_CAPACITY;
+  }
+
+  uint16_t capacity = telemetryAlignCapacityDown((uint16_t)requestedCapacity,
+                                                 TELEMETRY_BUFFER_ALLOC_STEP,
+                                                 TELEMETRY_BUFFER_MIN_CAPACITY);
+  while (capacity >= TELEMETRY_BUFFER_MIN_CAPACITY) {
+    TelemetrySample* buffer = (TelemetrySample*)malloc(sizeof(TelemetrySample) * capacity);
+    if (buffer != nullptr) {
+      *outCapacity = capacity;
+      return buffer;
+    }
+    if (capacity == TELEMETRY_BUFFER_MIN_CAPACITY) {
+      break;
+    }
+    capacity = telemetryStepCapacityDown(capacity,
+                                         TELEMETRY_BUFFER_ALLOC_STEP,
+                                         TELEMETRY_BUFFER_MIN_CAPACITY);
+  }
+
+  return nullptr;
+}
+
+static TelemetryEvent* telemetryAllocateEventBuffer(uint16_t* outCapacity) {
+  if (outCapacity == nullptr) {
+    return nullptr;
+  }
+
+  *outCapacity = 0U;
+
+  uint16_t capacity = TELEMETRY_EVENT_BUFFER_CAPACITY;
+  while (capacity >= TELEMETRY_EVENT_BUFFER_MIN_CAPACITY) {
+    TelemetryEvent* buffer = (TelemetryEvent*)malloc(sizeof(TelemetryEvent) * capacity);
+    if (buffer != nullptr) {
+      *outCapacity = capacity;
+      return buffer;
+    }
+    if (capacity == TELEMETRY_EVENT_BUFFER_MIN_CAPACITY) {
+      break;
+    }
+    capacity = telemetryStepCapacityDown(capacity,
+                                         TELEMETRY_EVENT_BUFFER_ALLOC_STEP,
+                                         TELEMETRY_EVENT_BUFFER_MIN_CAPACITY);
+  }
+
+  return nullptr;
+}
 
 static uint32_t telemetryOldestSeqLocked() {
-  if (g_telemetryCount == 0 || g_telemetryNextSeq == 0) {
+  if (g_telemetryCount == 0 || g_telemetryNextSeq == 0 || g_telemetrySampleCapacity == 0U) {
     return 0;
   }
   return g_telemetryNextSeq - (uint32_t)g_telemetryCount;
@@ -39,7 +158,7 @@ static uint32_t telemetryLatestSeqLocked() {
 }
 
 static uint32_t telemetryOldestEventIdLocked() {
-  if (g_telemetryEventCount == 0 || g_telemetryNextEventId == 0) {
+  if (g_telemetryEventCount == 0 || g_telemetryNextEventId == 0 || g_telemetryEventCapacity == 0U) {
     return 0;
   }
   return g_telemetryNextEventId - (uint32_t)g_telemetryEventCount;
@@ -53,17 +172,17 @@ static uint32_t telemetryLatestEventIdLocked() {
 }
 
 static uint16_t telemetryOldestIndexLocked() {
-  if (g_telemetryCount == 0) {
+  if (g_telemetryCount == 0 || g_telemetrySampleCapacity == 0U) {
     return 0;
   }
-  return (uint16_t)((g_telemetryHead + TELEMETRY_BUFFER_CAPACITY - g_telemetryCount) % TELEMETRY_BUFFER_CAPACITY);
+  return (uint16_t)((g_telemetryHead + g_telemetrySampleCapacity - g_telemetryCount) % g_telemetrySampleCapacity);
 }
 
 static uint16_t telemetryOldestEventIndexLocked() {
-  if (g_telemetryEventCount == 0) {
+  if (g_telemetryEventCount == 0 || g_telemetryEventCapacity == 0U) {
     return 0;
   }
-  return (uint16_t)((g_telemetryEventHead + TELEMETRY_EVENT_BUFFER_CAPACITY - g_telemetryEventCount) % TELEMETRY_EVENT_BUFFER_CAPACITY);
+  return (uint16_t)((g_telemetryEventHead + g_telemetryEventCapacity - g_telemetryEventCount) % g_telemetryEventCapacity);
 }
 
 static uint16_t telemetryComputeCarParamChangeMask(const CarParam_type* before, const CarParam_type* after) {
@@ -95,7 +214,7 @@ static void telemetryRecordEventLocked(uint8_t type,
                                        uint8_t previousCarIndex,
                                        uint16_t changedMask,
                                        const CarParam_type* carParam) {
-  if (g_telemetryEvents == nullptr || carParam == nullptr || carIndex >= CAR_MAX_COUNT) {
+  if (g_telemetryEvents == nullptr || g_telemetryEventCapacity == 0U || carParam == nullptr || carIndex >= CAR_MAX_COUNT) {
     return;
   }
 
@@ -113,8 +232,8 @@ static void telemetryRecordEventLocked(uint8_t type,
   event.carParam = *carParam;
 
   g_telemetryEvents[g_telemetryEventHead] = event;
-  g_telemetryEventHead = (uint16_t)((g_telemetryEventHead + 1U) % TELEMETRY_EVENT_BUFFER_CAPACITY);
-  if (g_telemetryEventCount < TELEMETRY_EVENT_BUFFER_CAPACITY) {
+  g_telemetryEventHead = (uint16_t)((g_telemetryEventHead + 1U) % g_telemetryEventCapacity);
+  if (g_telemetryEventCount < g_telemetryEventCapacity) {
     g_telemetryEventCount++;
   }
 }
@@ -130,9 +249,9 @@ static void telemetryFillStatusLocked(TelemetryStatus* outStatus) {
   outStatus->oldestEventId = telemetryOldestEventIdLocked();
   outStatus->latestEventId = telemetryLatestEventIdLocked();
   outStatus->storedCount = g_telemetryCount;
-  outStatus->capacity = TELEMETRY_BUFFER_CAPACITY;
+  outStatus->capacity = g_telemetrySampleCapacity;
   outStatus->eventCount = g_telemetryEventCount;
-  outStatus->eventCapacity = TELEMETRY_EVENT_BUFFER_CAPACITY;
+  outStatus->eventCapacity = g_telemetryEventCapacity;
   outStatus->sampleRateMs = TELEMETRY_SAMPLE_INTERVAL_MS;
   outStatus->sessionStartCarIndex = g_telemetrySessionStartCarIndex;
   outStatus->loggingActive = g_telemetryLoggingActive;
@@ -145,35 +264,39 @@ bool telemetryStartLogging(const StoredVar_type* storedVar,
                            uint16_t encoderInvertEnabled,
                            uint16_t adcVoltageRange_mV,
                            uint8_t activeCarIndex) {
-  if (storedVar == nullptr || activeCarIndex >= CAR_MAX_COUNT) {
+  telemetrySetLastStartError("");
+  if (storedVar == nullptr) {
+    telemetrySetLastStartError("Telemetry start failed: invalid config");
     return false;
+  }
+  if (activeCarIndex >= CAR_MAX_COUNT) {
+    activeCarIndex = (storedVar->selectedCarNumber < CAR_MAX_COUNT) ? (uint8_t)storedVar->selectedCarNumber : 0U;
   }
 
   uint32_t nowMs = millis();
   TelemetrySample* allocatedBuffer = g_telemetrySamples;
   TelemetryEvent* allocatedEventBuffer = g_telemetryEvents;
+  uint16_t allocatedSampleCapacity = g_telemetrySampleCapacity;
+  uint16_t allocatedEventCapacity = g_telemetryEventCapacity;
   if (allocatedBuffer == nullptr) {
-    allocatedBuffer = (TelemetrySample*)malloc(sizeof(TelemetrySample) * TELEMETRY_BUFFER_CAPACITY);
+    allocatedBuffer = telemetryAllocateSampleBuffer(&allocatedSampleCapacity);
     if (allocatedBuffer == nullptr) {
+      telemetrySetLastStartError("Telemetry start failed: not enough free memory");
       return false;
     }
   }
   if (allocatedEventBuffer == nullptr) {
-    allocatedEventBuffer = (TelemetryEvent*)malloc(sizeof(TelemetryEvent) * TELEMETRY_EVENT_BUFFER_CAPACITY);
-    if (allocatedEventBuffer == nullptr) {
-      if (g_telemetrySamples == nullptr && allocatedBuffer != nullptr) {
-        free(allocatedBuffer);
-      }
-      return false;
-    }
+    allocatedEventBuffer = telemetryAllocateEventBuffer(&allocatedEventCapacity);
   }
 
   portENTER_CRITICAL(&g_telemetryMux);
   if (g_telemetrySamples == nullptr) {
     g_telemetrySamples = allocatedBuffer;
+    g_telemetrySampleCapacity = allocatedSampleCapacity;
   }
   if (g_telemetryEvents == nullptr) {
     g_telemetryEvents = allocatedEventBuffer;
+    g_telemetryEventCapacity = allocatedEventCapacity;
   }
   bool shouldFreeTempBuffer = (allocatedBuffer != nullptr && g_telemetrySamples != allocatedBuffer);
   bool shouldFreeTempEventBuffer = (allocatedEventBuffer != nullptr && g_telemetryEvents != allocatedEventBuffer);
@@ -213,6 +336,12 @@ bool telemetryStartLogging(const StoredVar_type* storedVar,
   return true;
 }
 
+const char* telemetryGetLastStartError() {
+  static char snapshot[sizeof(g_telemetryLastStartError)];
+  telemetryCopyLastStartError(snapshot, sizeof(snapshot));
+  return snapshot;
+}
+
 void telemetryStopLogging() {
   portENTER_CRITICAL(&g_telemetryMux);
   g_telemetryLoggingActive = false;
@@ -228,6 +357,8 @@ void telemetryClear() {
   eventBufferToFree = g_telemetryEvents;
   g_telemetrySamples = nullptr;
   g_telemetryEvents = nullptr;
+  g_telemetrySampleCapacity = 0U;
+  g_telemetryEventCapacity = 0U;
   g_telemetryHead = 0;
   g_telemetryCount = 0;
   g_telemetryEventHead = 0;
@@ -322,7 +453,7 @@ size_t telemetryCopySamplesAfter(uint32_t afterSeq,
       for (size_t i = 0; i < copied; i++) {
         uint32_t seq = firstSeq + (uint32_t)i;
         uint16_t offset = (uint16_t)(seq - oldestSeq);
-        uint16_t index = (uint16_t)((oldestIndex + offset) % TELEMETRY_BUFFER_CAPACITY);
+        uint16_t index = (uint16_t)((oldestIndex + offset) % g_telemetrySampleCapacity);
         outSamples[i] = g_telemetrySamples[index];
       }
 
@@ -353,17 +484,17 @@ size_t telemetryCopyEvents(TelemetryEvent* outEvents,
 
   telemetryFillStatusLocked(outStatus);
 
-  if (g_telemetryEventCount > 0 && outEvents != nullptr && maxEvents > 0) {
+  if (g_telemetryEventCount > 0 && g_telemetryEventCapacity > 0U && outEvents != nullptr && maxEvents > 0) {
     uint16_t oldestIndex = telemetryOldestEventIndexLocked();
     size_t available = g_telemetryEventCount;
     copied = (available < maxEvents) ? available : maxEvents;
     if (available > maxEvents) {
       truncated = true;
-      oldestIndex = (uint16_t)((oldestIndex + (available - maxEvents)) % TELEMETRY_EVENT_BUFFER_CAPACITY);
+      oldestIndex = (uint16_t)((oldestIndex + (available - maxEvents)) % g_telemetryEventCapacity);
     }
 
     for (size_t i = 0; i < copied; i++) {
-      uint16_t index = (uint16_t)((oldestIndex + i) % TELEMETRY_EVENT_BUFFER_CAPACITY);
+      uint16_t index = (uint16_t)((oldestIndex + i) % g_telemetryEventCapacity);
       outEvents[i] = g_telemetryEvents[index];
     }
   }
@@ -400,7 +531,7 @@ void telemetryCaptureSample(uint8_t carIndex,
     return;
   }
 
-  if (g_telemetrySamples == nullptr) {
+  if (g_telemetrySamples == nullptr || g_telemetrySampleCapacity == 0U) {
     g_telemetryLoggingActive = false;
     portEXIT_CRITICAL(&g_telemetryMux);
     return;
@@ -457,8 +588,8 @@ void telemetryCaptureSample(uint8_t carIndex,
   sample.flags = flags;
 
   g_telemetrySamples[g_telemetryHead] = sample;
-  g_telemetryHead = (uint16_t)((g_telemetryHead + 1U) % TELEMETRY_BUFFER_CAPACITY);
-  if (g_telemetryCount < TELEMETRY_BUFFER_CAPACITY) {
+  g_telemetryHead = (uint16_t)((g_telemetryHead + 1U) % g_telemetrySampleCapacity);
+  if (g_telemetryCount < g_telemetrySampleCapacity) {
     g_telemetryCount++;
   } else {
     g_telemetryWrapped = true;

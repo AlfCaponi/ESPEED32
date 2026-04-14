@@ -43,6 +43,8 @@ static bool g_wifiConfigLoaded = false;
 static bool g_backupSecretLoaded = false;
 static bool g_backupSecretAvailable = false;
 static bool g_wifiRestartPending = false;
+static bool g_wifiStopPending = false;
+static bool g_wifiRestartAfterStopPending = false;
 static uint32_t g_wifiRestartAtMs = 0;
 static uint16_t g_wifiConfiguredMode = WIFI_CONFIG_AP;
 static uint8_t g_wifiActiveMode = WIFI_PORTAL_OFF;
@@ -72,6 +74,9 @@ static const size_t WIFI_BACKUP_TAG_LEN = 16;
 static const size_t WIFI_BACKUP_NONCE_B64_LEN = 16;
 static const size_t WIFI_BACKUP_TAG_B64_LEN = 24;
 static const size_t WIFI_BACKUP_PASS_B64_MAX_LEN = (((WIFI_STA_PASS_MAX_LEN + 2) / 3) * 4);
+static const size_t TELEMETRY_USB_SERIAL_LIVE_LIMIT = 96U;
+static const size_t TELEMETRY_LIVE_RESPONSE_LIMIT = 16U;
+static const size_t TELEMETRY_LIVE_EVENT_LIMIT = 4U;
 
 static bool readMacAddress(esp_mac_type_t type, uint8_t out[6]) {
   if (out == nullptr) return false;
@@ -82,6 +87,7 @@ static void serviceUsbSerialCommands();
 static void appendJsonEscaped(String& out, const char* in);
 static String buildTelemetryStatusPayload(const char* message);
 static String buildTelemetryLivePayload(uint32_t afterSeq, size_t limit);
+static String buildTelemetryEventsPayload();
 static String buildTelemetryConfigSnapshotJson();
 static String buildInfoJson();
 static void sendSerialLengthPrefixedPayload(const String& payload);
@@ -2279,6 +2285,7 @@ static void serviceUsbSerialCommands() {
  *   "SAVE"           → "OK - Saved to flash"
  *   "TSTATUS"        → "<bytecount>\n<json>"
  *   "TLIVE a l"      → "<bytecount>\n<json>" (afterSeq=a, limit=l)
+ *   "TEVENTS"        → "<bytecount>\n<json>"
  *   "TSTART"         → "<bytecount>\n<json>"
  *   "TSTOP"          → "<bytecount>\n<json>"
  *   "TCLEAR"         → "<bytecount>\n<json>"
@@ -2337,7 +2344,7 @@ static void handleSerialCommand(const String& cmd) {
 
   } else if (cmd.startsWith("TLIVE")) {
     uint32_t afterSeq = 0U;
-    size_t limit = 256U;
+    size_t limit = TELEMETRY_USB_SERIAL_LIVE_LIMIT;
     int32_t firstSpace = cmd.indexOf(' ');
     if (firstSpace > 0 && firstSpace < (int32_t)cmd.length() - 1) {
       int32_t secondSpace = cmd.indexOf(' ', firstSpace + 1);
@@ -2362,8 +2369,11 @@ static void handleSerialCommand(const String& cmd) {
       }
     }
     if (limit < 1U) limit = 1U;
-    if (limit > 256U) limit = 256U;
+    if (limit > TELEMETRY_USB_SERIAL_LIVE_LIMIT) limit = TELEMETRY_USB_SERIAL_LIVE_LIMIT;
     sendSerialLengthPrefixedPayload(buildTelemetryLivePayload(afterSeq, limit));
+
+  } else if (cmd == "TEVENTS") {
+    sendSerialLengthPrefixedPayload(buildTelemetryEventsPayload());
 
   } else if (cmd == "TSTART") {
     if (!telemetryStartLogging(&g_storedVar,
@@ -2371,7 +2381,10 @@ static void handleSerialCommand(const String& cmd) {
                                g_encoderInvertEnabled,
                                g_adcVoltageRange_mV,
                                (uint8_t)g_carSel)) {
-      Serial.println("ERR:Telemetry start failed");
+      const char* err = telemetryGetLastStartError();
+      if (err == nullptr || err[0] == '\0') err = "Telemetry start failed";
+      Serial.print("ERR:");
+      Serial.println(err);
       return;
     }
     sendSerialLengthPrefixedPayload(buildTelemetryStatusPayload("Telemetry logging started"));
@@ -2696,12 +2709,12 @@ static uint32_t getTelemetryArgU32(const char* name, uint32_t defaultValue) {
 }
 
 static size_t getTelemetryLiveLimit() {
-  uint32_t limit = getTelemetryArgU32("limit", 120U);
+  uint32_t limit = getTelemetryArgU32("limit", TELEMETRY_LIVE_RESPONSE_LIMIT);
   if (limit == 0U) {
-    limit = 120U;
+    limit = TELEMETRY_LIVE_RESPONSE_LIMIT;
   }
-  if (limit > 256U) {
-    limit = 256U;
+  if (limit > TELEMETRY_LIVE_RESPONSE_LIMIT) {
+    limit = TELEMETRY_LIVE_RESPONSE_LIMIT;
   }
   return (size_t)limit;
 }
@@ -2778,19 +2791,19 @@ static String buildTelemetryConfigSummaryJsonFromSnapshot(const TelemetryConfigS
   json.reserve(960);
   json += "{";
   json += "\"selectedCarNumber\":";
-  json += String(activeCarIndex);
+  json.concat((unsigned int)activeCarIndex);
   json += ",\"antiSpinStepMs\":";
-  json += String(snapshot.antiSpinStepMs);
+  json.concat((unsigned int)snapshot.antiSpinStepMs);
   json += ",\"encoderInvert\":";
-  json += String(snapshot.encoderInvertEnabled ? 1U : 0U);
+  json.concat((unsigned int)(snapshot.encoderInvertEnabled ? 1U : 0U));
   json += ",\"adcVoltageRangeMv\":";
-  json += String(snapshot.adcVoltageRange_mV);
+  json.concat((unsigned int)snapshot.adcVoltageRange_mV);
   json += ",\"statusSlots\":[";
   for (uint8_t i = 0; i < STATUS_SLOTS; i++) {
     if (i > 0) {
       json += ",";
     }
-    json += String(normalizeStatusSlotForUi(snapshot.storedVar.statusSlot[i]));
+    json.concat((unsigned int)normalizeStatusSlotForUi(snapshot.storedVar.statusSlot[i]));
   }
   json += "],\"carNames\":";
   appendTelemetryCarNamesJson(json, snapshot.storedVar);
@@ -2803,19 +2816,19 @@ static String buildTelemetryConfigSummaryJsonFromSnapshot(const TelemetryConfigS
 static void appendTelemetryEventJson(String& json, const TelemetryEvent& event) {
   json += "{";
   json += "\"id\":";
-  json += String((unsigned long)event.id);
+  json.concat((unsigned long)event.id);
   json += ",\"tMs\":";
-  json += String((unsigned long)event.t_ms);
+  json.concat((unsigned long)event.t_ms);
   json += ",\"sampleSeq\":";
-  json += String((unsigned long)event.sampleSeq);
+  json.concat((unsigned long)event.sampleSeq);
   json += ",\"type\":\"";
   json += (event.type == TELEMETRY_EVENT_CAR_SELECT) ? "car_select" : "car_params";
   json += "\",\"carIndex\":";
-  json += String((unsigned int)event.carIndex);
+  json.concat((unsigned int)event.carIndex);
   json += ",\"previousCarIndex\":";
-  json += String((unsigned int)event.previousCarIndex);
+  json.concat((unsigned int)event.previousCarIndex);
   json += ",\"changedMask\":";
-  json += String((unsigned int)event.changedMask);
+  json.concat((unsigned int)event.changedMask);
   json += ",\"carParams\":";
   appendTelemetryCarParamJson(json, event.carParam);
   json += "}";
@@ -2881,7 +2894,7 @@ static void appendTelemetryStatusFields(String& json, const TelemetryStatus& sta
   json += ",\"statusSlots\":[";
   for (uint8_t i = 0; i < STATUS_SLOTS; i++) {
     if (i > 0) json += ",";
-    json += String(normalizeStatusSlotForUi(g_storedVar.statusSlot[i]));
+    json.concat((unsigned int)normalizeStatusSlotForUi(g_storedVar.statusSlot[i]));
   }
   json += "]}";
 }
@@ -2905,16 +2918,17 @@ static String buildTelemetryStatusPayload(const char* message) {
 
 static String buildTelemetryLivePayload(uint32_t afterSeq, size_t limit) {
   static TelemetrySample samples[256];
-  static TelemetryEvent events[TELEMETRY_EVENT_BUFFER_CAPACITY];
+  static TelemetryEvent events[TELEMETRY_LIVE_EVENT_LIMIT];
   TelemetryStatus status;
+  bool includeEvents = (afterSeq == 0U);
   bool truncated = false;
   bool hasMore = false;
   bool eventsTruncated = false;
   size_t copied = telemetryCopySamplesAfter(afterSeq, samples, limit, &truncated, &hasMore, &status);
-  size_t eventCopied = telemetryCopyEvents(events, TELEMETRY_EVENT_BUFFER_CAPACITY, &eventsTruncated, nullptr);
+  size_t eventCopied = includeEvents ? telemetryCopyEvents(events, TELEMETRY_LIVE_EVENT_LIMIT, &eventsTruncated, nullptr) : 0U;
 
   String json;
-  json.reserve(1600 + (copied * 92U) + (eventCopied * 180U));
+  json.reserve(960 + (copied * 92U) + (eventCopied * 180U));
   json += "{\"ok\":true";
   appendTelemetryStatusFields(json, status);
   json += ",\"truncated\":";
@@ -2922,7 +2936,7 @@ static String buildTelemetryLivePayload(uint32_t afterSeq, size_t limit) {
   json += ",\"hasMore\":";
   json += hasMore ? "true" : "false";
   json += ",\"returned\":";
-  json += String((unsigned long)copied);
+  json.concat((unsigned long)copied);
   json += ",\"eventTruncated\":";
   json += eventsTruncated ? "true" : "false";
   json += ",\"events\":[";
@@ -2940,30 +2954,57 @@ static String buildTelemetryLivePayload(uint32_t afterSeq, size_t limit) {
       json += ",";
     }
     json += "[";
-    json += String((unsigned long)s.seq);
+    json.concat((unsigned long)s.seq);
     json += ",";
-    json += String((unsigned long)s.t_ms);
+    json.concat((unsigned long)s.t_ms);
     json += ",";
-    json += String((unsigned int)s.trigger_pct);
+    json.concat((unsigned int)s.trigger_pct);
     json += ",";
-    json += String((unsigned int)s.output_pct);
+    json.concat((unsigned int)s.output_pct);
     json += ",";
-    json += String((unsigned int)s.vin_mV);
+    json.concat((unsigned int)s.vin_mV);
     json += ",";
-    json += String((unsigned int)s.current_mA);
+    json.concat((unsigned int)s.current_mA);
     json += ",";
     appendPercentX10JsonValue(json, s.brake_pct);
     json += ",";
-    json += String((unsigned int)s.sensi_halfPct);
+    json.concat((unsigned int)s.sensi_halfPct);
     json += ",";
-    json += String((unsigned int)s.carIndex);
+    json.concat((unsigned int)s.carIndex);
     json += ",";
-    json += String((unsigned int)s.releaseMode);
+    json.concat((unsigned int)s.releaseMode);
     json += ",";
-    json += String((unsigned int)s.flags);
+    json.concat((unsigned int)s.flags);
     json += "]";
   }
 
+  json += "]}";
+  return json;
+}
+
+static String buildTelemetryEventsPayload() {
+  static TelemetryEvent events[TELEMETRY_EVENT_BUFFER_CAPACITY];
+  TelemetryStatus status;
+  bool eventsTruncated = false;
+  size_t copied = telemetryCopyEvents(events, TELEMETRY_EVENT_BUFFER_CAPACITY, &eventsTruncated, &status);
+
+  String json;
+  json.reserve(768 + (copied * 180U));
+  json += "{\"ok\":true";
+  appendTelemetryStatusFields(json, status);
+  json += ",\"eventTruncated\":";
+  json += eventsTruncated ? "true" : "false";
+  json += ",\"eventsTruncated\":";
+  json += eventsTruncated ? "true" : "false";
+  json += ",\"returned\":";
+  json.concat((unsigned long)copied);
+  json += ",\"events\":[";
+  for (size_t i = 0; i < copied; i++) {
+    if (i > 0) {
+      json += ",";
+    }
+    appendTelemetryEventJson(json, events[i]);
+  }
   json += "]}";
   return json;
 }
@@ -2997,13 +3038,22 @@ static void handleTelemetryStatus() {
   g_wifiServer->send(200, "application/json", buildTelemetryStatusPayload(""));
 }
 
+static void handleTelemetryConfig() {
+  g_wifiServer->send(200, "application/json", buildTelemetryConfigSnapshotJson());
+}
+
 static void handleTelemetryStart() {
   if (!telemetryStartLogging(&g_storedVar,
                              g_antiSpinStepMs,
                              g_encoderInvertEnabled,
                              g_adcVoltageRange_mV,
                              (uint8_t)g_carSel)) {
-    g_wifiServer->send(500, "application/json", "{\"ok\":false,\"error\":\"Telemetry start failed\"}");
+    const char* err = telemetryGetLastStartError();
+    if (err == nullptr || err[0] == '\0') err = "Telemetry start failed";
+    String payload = "{\"ok\":false,\"error\":\"";
+    appendJsonEscaped(payload, err);
+    payload += "\"}";
+    g_wifiServer->send(500, "application/json", payload);
     return;
   }
 
@@ -3025,6 +3075,10 @@ static void handleTelemetryLive() {
   uint32_t afterSeq = getTelemetryArgU32("after", 0U);
   size_t limit = getTelemetryLiveLimit();
   g_wifiServer->send(200, "application/json", buildTelemetryLivePayload(afterSeq, limit));
+}
+
+static void handleTelemetryEvents() {
+  g_wifiServer->send(200, "application/json", buildTelemetryEventsPayload());
 }
 
 static void handleTelemetryExportCsv() {
@@ -3447,7 +3501,7 @@ static void handleOtaUpload() {
     if (g_otaTargetSpiffs) {
       obdWriteString(&g_obd, 0, 8, 0, (char*)"SPIFFS Update", FONT_8x8, OBD_BLACK, 1);
     } else {
-      obdWriteString(&g_obd, 0, 16, 0, (char*)"OTA Update", FONT_8x8, OBD_BLACK, 1);
+      obdWriteString(&g_obd, 0, 16, 0, (char*)"FW Update", FONT_8x8, OBD_BLACK, 1);
     }
     obdWriteString(&g_obd, 0, 0, 3 * HEIGHT8x8, (char*)"Updating...", FONT_8x8, OBD_BLACK, 1);
     obdWriteString(&g_obd, 0, 0, 6 * HEIGHT8x8, (char*)"Do not power off!", FONT_6x8, OBD_BLACK, 1);
@@ -3520,14 +3574,14 @@ static void handleOtaUpload() {
       if (g_otaTargetSpiffs) {
         obdWriteString(&g_obd, 0, 0, 24, (char*)"SPIFFS OK!", FONT_12x16, OBD_BLACK, 1);
       } else {
-        obdWriteString(&g_obd, 0, 8, 24, (char*)"OTA OK!", FONT_12x16, OBD_BLACK, 1);
+        obdWriteString(&g_obd, 0, 16, 24, (char*)"FW OK!", FONT_12x16, OBD_BLACK, 1);
       }
     } else {
       obdFill(&g_obd, OBD_WHITE, 1);
       if (g_otaTargetSpiffs) {
         obdWriteString(&g_obd, 0, 0, 24, (char*)"SPIFFS FAIL!", FONT_12x16, OBD_BLACK, 1);
       } else {
-        obdWriteString(&g_obd, 0, 0, 24, (char*)"OTA FAIL!", FONT_12x16, OBD_BLACK, 1);
+        obdWriteString(&g_obd, 0, 8, 24, (char*)"FW FAIL!", FONT_12x16, OBD_BLACK, 1);
       }
     }
     g_otaInProgress = false;
@@ -3557,7 +3611,7 @@ static void handleOta() {
   String requestToken = g_wifiServer->header("X-Ota-Token");
   if (!requestToken.isEmpty() && requestToken == g_otaRejectedToken) {
     g_otaRejectedToken = "";
-    g_wifiServer->send(409, "text/plain", "Another update is already running. Wait for completion.");
+    g_wifiServer->send(409, "text/plain", "Firmware update already in progress. Please wait for it to complete.");
     return;
   }
 
@@ -4175,7 +4229,9 @@ static void registerWebRoutes() {
   g_wifiServer->on("/api/apply", HTTP_POST, []() { if (!requireControllerAuth()) return; handleApply(); });
   g_wifiServer->on("/api/save", HTTP_POST, []() { if (!requireControllerAuth()) return; handleSave(); });
   g_wifiServer->on("/api/telemetry/status", HTTP_GET, []() { if (!requireControllerAuth()) return; handleTelemetryStatus(); });
+  g_wifiServer->on("/api/telemetry/config", HTTP_GET, []() { if (!requireControllerAuth()) return; handleTelemetryConfig(); });
   g_wifiServer->on("/api/telemetry/live", HTTP_GET, []() { if (!requireControllerAuth()) return; handleTelemetryLive(); });
+  g_wifiServer->on("/api/telemetry/events", HTTP_GET, []() { if (!requireControllerAuth()) return; handleTelemetryEvents(); });
   g_wifiServer->on("/api/telemetry/start", HTTP_POST, []() { if (!requireControllerAuth()) return; handleTelemetryStart(); });
   g_wifiServer->on("/api/telemetry/stop", HTTP_POST, []() { if (!requireControllerAuth()) return; handleTelemetryStop(); });
   g_wifiServer->on("/api/telemetry/clear", HTTP_POST, []() { if (!requireControllerAuth()) return; handleTelemetryClear(); });
@@ -4250,16 +4306,52 @@ static void stopWiFiTransportOnly() {
   }
 
   WiFi.mode(WIFI_OFF);
+  delay(120);
   g_wifiActiveMode = WIFI_PORTAL_OFF;
   g_wifiApFallbackActive = false;
   g_wifiConnectedSsid[0] = '\0';
+}
+
+static void stopWiFiPortalNow() {
+  g_wifiStopPending = false;
+  bool willRestart = g_wifiRestartAfterStopPending && !isOtaInProgress();
+
+  if (g_wifiServer != nullptr) {
+    if (!willRestart) telemetryStopLogging();
+    g_wifiServer->stop();
+    delay(50);  /* Let lwIP drain in-flight requests before tearing down WiFi */
+    delete g_wifiServer;
+    g_wifiServer = nullptr;
+  } else if (!willRestart) {
+    telemetryStopLogging();  /* Server already null — still stop logging on clean shutdown */
+  }
+
+  stopWiFiTransportOnly();
+
+  if (g_spiffsMounted) {
+    SPIFFS.end();
+    g_spiffsMounted = false;
+  }
+
+  if (willRestart) {
+    g_wifiRestartAfterStopPending = false;
+    startWiFiPortal();
+  } else {
+    g_wifiRestartAfterStopPending = false;
+  }
 }
 
 static bool startWiFiApTransport() {
   char ssid[20];
   getWiFiPortalSsid(ssid, sizeof(ssid));
 
+  WiFi.persistent(false);
+  WiFi.disconnect(true, false, 250);
+  WiFi.mode(WIFI_OFF);
+  delay(120);
   WiFi.mode(WIFI_AP);
+  WiFi.setSleep(false);
+  esp_wifi_set_max_tx_power(84); /* Keep AP/client link as strong/stable as possible. */
   if (!WiFi.softAP(ssid, WIFI_PASS, WIFI_AP_CHANNEL, 0, WIFI_MAX_CONNECTIONS)) {
     WiFi.mode(WIFI_OFF);
     return false;
@@ -4355,8 +4447,15 @@ static bool startWiFiServerOnly() {
 }
 
 bool startWiFiPortal() {
+  g_wifiStopPending = false;
+  g_wifiRestartAfterStopPending = false;
+
   if (g_wifiServer != nullptr) {
     return true;
+  }
+
+  if (g_wifiActiveMode != WIFI_PORTAL_OFF) {
+    stopWiFiTransportOnly();  /* Recover from half-torn-down WiFi state before rebuilding portal/server. */
   }
 
   loadWiFiNetworkSettingsIfNeeded();
@@ -4393,8 +4492,17 @@ bool startWiFiPortal() {
 }
 
 void serviceWiFiPortal() {
+  if (g_wifiStopPending) {
+    stopWiFiPortalNow();
+    return;
+  }
+
   if (g_wifiServer != nullptr) {
     g_wifiServer->handleClient();
+  }
+
+  if (g_wifiStopPending) {
+    stopWiFiPortalNow();
   }
 }
 
@@ -4406,7 +4514,9 @@ void serviceConnectivityPortal() {
       (int32_t)(millis() - g_wifiRestartAtMs) >= 0) {
     g_wifiRestartPending = false;
     if (isWiFiPortalActive()) {
+      g_wifiRestartAfterStopPending = true;
       stopWiFiPortal();
+    } else {
       startWiFiPortal();
     }
   }
@@ -4420,20 +4530,12 @@ void stopWiFiPortal() {
   g_wifiRestartPending = false;
   g_wifiRestartAtMs = 0;
 
-  telemetryStopLogging();
-
-  if (g_wifiServer != nullptr) {
-    g_wifiServer->stop();
-    delete g_wifiServer;
-    g_wifiServer = nullptr;
+  if (g_wifiServer != nullptr || g_wifiStopPending) {
+    g_wifiStopPending = true;
+    return;
   }
 
-  stopWiFiTransportOnly();
-
-  if (g_spiffsMounted) {
-    SPIFFS.end();
-    g_spiffsMounted = false;
-  }
+  stopWiFiPortalNow();
 }
 
 
