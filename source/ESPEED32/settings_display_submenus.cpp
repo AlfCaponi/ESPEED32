@@ -231,7 +231,7 @@ void showScreensaverSettings() {
     {"NOW", "LINE1", "LINE2", "TIME", "BACK"},
     {"NOW", "LINE1", "LINE2", "TIME", "BACK"},
     {"AHORA", "LINEA1", "LINEA2", "TIEMPO", "ATRAS"},
-    {"JETZT", "ZEILE1", "ZEILE2", "ZEIT", "ZURUCK"},
+    {"HINWEIS", "ZEILE1", "ZEILE2", "ZEIT", "ZURUCK"},
     {"ORA", "RIGA1", "RIGA2", "TEMPO", "INDIETRO"},
     {"NU", "REGEL1", "REGEL2", "TIJD", "TERUG"},
     {"AGORA", "LINHA1", "LINHA2", "TEMPO", "VOLTAR"}

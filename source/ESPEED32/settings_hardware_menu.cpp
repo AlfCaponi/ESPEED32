@@ -29,7 +29,7 @@ static const char* HARDWARE_MENU_LABELS[9][HARDWARE_ITEMS_COUNT] = {
   {"ENC.INVERT", "EXT.POT.", "TRIGGER", "PWM MAX", "TEST", "BACK"},
   {"ENC.INVERT", "EXT.POT.", "TRIGGER", "PWM MAX", "TEST", "BACK"},
   {"ENC.INVERT", "POT.EXT.", "TRIGGER", "PWM MAX", "TEST", "ATRAS"},
-  {"ENC.INVERT", "EXT.POT.", "TRIGGER", "PWM MAX", "TEST", "ZURUCK"},
+  {"ENC.UMDREHEN", "EXT.POT.", "TRIGGER", "PWM MAX", "TEST", "ZURUCK"},
   {"ENC.INVERT", "POT.EST.", "TRIGGER", "PWM MAX", "TEST", "INDIETRO"},
   {"ENC.INVERT", "EXT.POT.", "TRIGGER", "PWM MAX", "TEST", "TERUG"},
   {"ENC.INVERT", "POT.EXT.", "TRIGGER", "PWM MAX", "TESTE", "VOLTAR"}
@@ -41,7 +41,7 @@ static const char* HARDWARE_MENU_LABELS_PASCAL[9][HARDWARE_ITEMS_COUNT] = {
   {"Enc.Invert", "Ext.Pot.", "Trigger", "Pwm Max", "Test", "Back"},
   {"Enc.Invert", "Ext.Pot.", "Trigger", "Pwm Max", "Test", "Back"},
   {"Enc.Invert", "Pot.Ext.", "Trigger", "Pwm Max", "Test", "Atras"},
-  {"Enc.Invert", "Ext.Pot.", "Trigger", "Pwm Max", "Test", "Zuruck"},
+  {"Enc.Umdrehen", "Ext.Pot.", "Trigger", "Pwm Max", "Test", "Zuruck"},
   {"Enc.Invert", "Pot.Est.", "Trigger", "Pwm Max", "Test", "Indietro"},
   {"Enc.Invert", "Ext.Pot.", "Trigger", "Pwm Max", "Test", "Terug"},
   {"Enc.Invert", "Pot.Ext.", "Trigger", "Pwm Max", "Teste", "Voltar"}

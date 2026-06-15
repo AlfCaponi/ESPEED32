@@ -330,7 +330,7 @@ void showResetSubmenu() {
     {"Car", "Settings", "Calibration", "Network", "Everything", "Back"},
     {"Car", "Settings", "Calibration", "Network", "Everything", "Back"},
     {"Auto", "Ajustes", "Calibrac.", "Red", "Todo", "Atras"},
-    {"Auto", "Einstell.", "Kalibr.", "Netzwerk", "Alles", "Zuruck"},
+    {"Auto-Profile", "Einstellungen", "Kalibrierung", "Netzwerk", "Alles", "Zuruck"},
     {"Auto", "Impostaz.", "Calibraz.", "Rete", "Tutto", "Indietro"},
     {"Auto", "Instell.", "Kalibr.", "Netwerk", "Alles", "Terug"},
     {"Carro", "Ajustes", "Calibr.", "Rede", "Tudo", "Voltar"}

@@ -7,7 +7,7 @@ const char* MENU_NAMES[][12] = {
   /* CS  */ {"BRAKE", "ATTACK", "CHOKE2", "PROFIL", "FADE", "PWM_F", "BRAKE+", "CHOKE1", "SETTINGS", "STATS", "LOCK", "*CAR*"},
   /* ACD */ {"BRAKE", "SENSI", "ANTIS", "CURVE", "FADE", "PWM_F", "BRAKE+", "CHOKE", "SETTINGS", "STATS", "LOCK", "*CAR*"},
   /* ESP */ {"FRENO", "SENSI", "ANTIS", "CURVA", "FADE", "PWM_F", "FRENO+", "LIMITE", "AJUSTES", "STATS", "BLOQUEO", "*AUTO*"},
-  /* DEU */ {"BREMSE", "SENSI", "ANTIS", "KURVE", "FADE", "PWM_F", "BREMSE+", "LIMIT", "SETUP", "STATS", "SPERRE", "*AUTO*"},
+  /* DEU */ {"BREMSE", "SENSI", "ANTIS", "KURVE", "ANFAHR", "PWM_F", "BREMSE+", "LIMIT", "EINSTELLG", "STATS", "SPERRE", "*AUTO*"},
   /* ITA */ {"FRENO", "SENSI", "ANTIS", "CURVA", "FADE", "PWM_F", "FRENO+", "LIMITE", "SETUP", "STATS", "BLOCCO", "*AUTO*"},
   /* NLD */ {"REM", "SENSI", "ANTIS", "CURVE", "FADE", "PWM_F", "REM+", "LIMIET", "INSTELL", "STATS", "VERGR", "*AUTO*"},
   /* POR */ {"TRAVAO", "SENSI", "ANTIS", "CURVA", "FADE", "PWM_F", "TRAVAO+", "LIMITE", "AJUSTES", "STATS", "BLOQ", "*CARRO*"}
@@ -20,7 +20,7 @@ const char* SETTINGS_MENU_NAMES[][12] = {
   /* CS  */ {"POWER", "DISPLAY", "SOUND", "HARDWARE", "STATS", "WIFI", "LOGGING", "LOCK", "USB INFO", "RESET", "ABOUT", "BACK"},
   /* ACD */ {"POWER", "DISPLAY", "SOUND", "HARDWARE", "STATS", "WIFI", "LOGGING", "LOCK", "USB INFO", "RESET", "ABOUT", "BACK"},
   /* ESP */ {"ENERGIA", "PANTALLA", "SONIDO", "HARDWARE", "STATS", "WIFI", "LOGGING", "BLOQUEO", "USB INFO", "RESET", "ACERCA", "ATRAS"},
-  /* DEU */ {"STROM", "ANZEIGE", "TON", "HARDWARE", "STATS", "WIFI", "LOGGING", "SPERRE", "USB INFO", "RESET", "INFO", "ZURUCK"},
+  /* DEU */ {"STROM", "ANZEIGE", "TON", "HARDWARE", "STATS", "WIFI", "TELEMETRIE", "SPERRE", "USB INFO", "ZURUCKSETZEN", "INFO", "ZURUCK"},
   /* ITA */ {"POTENZA", "SCHERMO", "SUONO", "HARDWARE", "STATS", "WIFI", "LOGGING", "BLOCCO", "USB INFO", "RESET", "INFO", "INDIETRO"},
   /* NLD */ {"STROOM", "DISPLAY", "GELUID", "HARDWARE", "STATS", "WIFI", "LOGGING", "VERGR", "USB INFO", "RESET", "INFO", "TERUG"},
   /* POR */ {"ENERGIA", "ECRA", "SOM", "HARDWARE", "STATS", "WIFI", "LOGGING", "BLOQ", "USB INFO", "RESET", "SOBRE", "VOLTAR"}
@@ -33,7 +33,7 @@ const char* POWER_MENU_NAMES[][6] = {
   /* CS  */ {"SCRSV", "SLEEP", "DEEP SLEEP", "STARTUP", "VIN CAL.", "BACK"},
   /* ACD */ {"SCRSV", "SLEEP", "DEEP SLEEP", "STARTUP", "VIN CAL.", "BACK"},
   /* ESP */ {"SCRSV", "REPOSO", "SUSP PROF", "ARRANQUE", "VIN CAL.", "ATRAS"},
-  /* DEU */ {"SCRSV", "SCHLAF", "TIEF SCHL", "START", "VIN KAL.", "ZURUCK"},
+  /* DEU */ {"HINWEIS", "STANDBY", "AUSSCHALTEN", "START", "VIN KAL.", "ZURUCK"},
   /* ITA */ {"SCRSV", "RIPOSO", "SONNO PROF", "AVVIO", "VIN CAL.", "INDIETRO"},
   /* NLD */ {"SCRSV", "SLAPEN", "DIEP SLP", "START", "VIN KAL.", "TERUG"},
   /* POR */ {"SCRSV", "DORMIR", "SONO PROF", "ARRANQUE", "VIN CAL.", "VOLTAR"}
@@ -46,7 +46,7 @@ const char* DISPLAY_MENU_NAMES[][8] = {
   /* CS  */ {"RACE MODE", "LANGUAGE", "CASE", "FONT SIZE", "ADVANCED", "STEPS", "STATUS BAR", "BACK"},
   /* ACD */ {"RACE MODE", "LANGUAGE", "CASE", "FONT SIZE", "ADVANCED", "STEPS", "STATUS BAR", "BACK"},
   /* ESP */ {"MODO RACE", "IDIOMA", "ESTILO", "TAM TEXTO", "AVANZADO", "PASOS", "BARRA EST", "ATRAS"},
-  /* DEU */ {"RACE MODUS", "SPRACHE", "STIL", "SCHRIFT", "ERWEITERT", "SCHRITTE", "STATUSLEISTE", "ZURUCK"},
+  /* DEU */ {"RENN MODUS", "SPRACHE", "STIL", "SCHRIFT", "ERWEITERT", "SCHRITTE", "STATUSLEISTE", "ZURUCK"},
   /* ITA */ {"MODO GARA", "LINGUA", "STILE", "DIM TESTO", "AVANZATO", "PASSI", "BARRA STATO", "INDIETRO"},
   /* NLD */ {"RACE MODUS", "TAAL", "STIJL", "TEKSTGRT", "GEAVANCEERD", "STAPPEN", "STATUSBALK", "TERUG"},
   /* POR */ {"MODO RACE", "IDIOMA", "ESTILO", "TAM TEXTO", "AVANCADO", "PASSOS", "BARRA EST", "VOLTAR"}
@@ -59,7 +59,7 @@ const char* STEPS_MENU_NAMES[][4] = {
   /* CS  */ {"ANTISPIN", "BRAKE STEP", "SENSI STEP", "BACK"},
   /* ACD */ {"ANTISPIN", "BRAKE STEP", "SENSI STEP", "BACK"},
   /* ESP */ {"ANTISPIN", "PASO FRENO", "PASO SENSI", "ATRAS"},
-  /* DEU */ {"ANTISPIN", "BRK SCHRITT", "SEN SCHRITT", "ZURUCK"},
+  /* DEU */ {"ANTISPIN", "BREMS SCHR", "SENSI SCHR", "ZURUCK"},
   /* ITA */ {"ANTISPIN", "PASSO FRENO", "PASSO SENSI", "INDIETRO"},
   /* NLD */ {"ANTISPIN", "STAP REM", "STAP SENSI", "TERUG"},
   /* POR */ {"ANTISPIN", "PASSO FREIO", "PASSO SENSI", "VOLTAR"}
@@ -85,7 +85,7 @@ const char* CAR_MENU_OPTIONS[][5] = {
   /* CS  */ {"SELECT", "RENAME", "RACESWP", "COPY", "RESET"},
   /* ACD */ {"SELECT", "RENAME", "RACESWP", "COPY", "RESET"},
   /* ESP */ {"ELEGIR", "RENOMB", "RACESWP", "COPIAR", "RESET"},
-  /* DEU */ {"WAHL", "NAME", "RACESWP", "KOPIER", "RESET"},
+  /* DEU */ {"WAEHLEN", "NAME", "GRIDWE", "KOPIER", "ZURUCKSETZEN"},
   /* ITA */ {"SCEGLI", "RINOM", "RACESWP", "COPIA", "RESET"},
   /* NLD */ {"KIES", "HERNOEM", "RACESWP", "KOPIE", "RESET"},
   /* POR */ {"ESCOLH", "RENOME", "RACESWP", "COPIAR", "RESET"}
@@ -98,7 +98,7 @@ const char* VIEW_MODE_LABELS[][3] = {
   /* CS  */ {"OFF", "FULL", "SIMPLE"},
   /* ACD */ {"OFF", "FULL", "SIMPLE"},
   /* ESP */ {"OFF", "TOTAL", "SIMPLE"},
-  /* DEU */ {"AUS", "VOLL", "EINF"},
+  /* DEU */ {"AUS", "VOLL", "EINFA"},
   /* ITA */ {"OFF", "PIENO", "SEMPL"},
   /* NLD */ {"UIT", "VOL", "EENV"},
   /* POR */ {"OFF", "TOTAL", "SIMP"}
@@ -124,7 +124,7 @@ const char* LOCK_MENU_NAMES[][4] = {
   /* CS  */ {"MENU ITEM", "SHORTCUT", "CONFIRM", "BACK"},
   /* ACD */ {"MENU ITEM", "SHORTCUT", "CONFIRM", "BACK"},
   /* ESP */ {"MENU", "ATAJO", "CONFIRM", "ATRAS"},
-  /* DEU */ {"MENUPUNKT", "KUERZEL", "BESTAET", "ZURUCK"},
+  /* DEU */ {"MENUPUNKT", "ENTSPERREN", "BESTAETIGEN", "ZURUCK"},
   /* ITA */ {"VOCE MENU", "SCORCIAT", "CONFIRM", "INDIETRO"},
   /* NLD */ {"MENU ITEM", "SNELKOP", "BEVESTIG", "TERUG"},
   /* POR */ {"ITEM MENU", "ATALHO", "CONFIRM", "VOLTAR"}
@@ -137,7 +137,7 @@ const char* LOCK_MENU_NAMES_PASCAL[][4] = {
   /* CS  */ {"Menu Item", "Shortcut", "Confirm", "Back"},
   /* ACD */ {"Menu Item", "Shortcut", "Confirm", "Back"},
   /* ESP */ {"Menu", "Atajo", "Confirm", "Atras"},
-  /* DEU */ {"Menupunkt", "Kuerzel", "Bestaet", "Zuruck"},
+  /* DEU */ {"Menupunkt", "Entsperren", "Bestaetigen", "Zuruck"},
   /* ITA */ {"Voce Menu", "Scorciat", "Confirm", "Indietro"},
   /* NLD */ {"Menu Item", "Snelkop", "Bevestig", "Terug"},
   /* POR */ {"Item Menu", "Atalho", "Confirm", "Voltar"}
@@ -176,7 +176,7 @@ const char* RELEASE_BRAKE_MODE_LABELS[][3] = {
   /* CS  */ {"OFF", "QCK", "DRG"},
   /* ACD */ {"OFF", "QCK", "DRG"},
   /* ESP */ {"OFF", "QCK", "DRG"},
-  /* DEU */ {"AUS", "QCK", "DRG"},
+  /* DEU */ {"AUS", "SCH", "VZG"},
   /* ITA */ {"OFF", "QCK", "DRG"},
   /* NLD */ {"UIT", "QCK", "DRG"},
   /* POR */ {"OFF", "QCK", "DRG"}
@@ -218,7 +218,7 @@ const char* MENU_NAMES_PASCAL[][12] = {
   /* CS  */ {"Brake", "Attack", "Choke2", "Profil", "Fade", "Pwm_F", "Brake+", "Choke1", "Settings", "Stats", "Lock", "*Car*"},
   /* ACD */ {"Brake", "Sensi", "Antis", "Curve", "Fade", "Pwm_F", "Brake+", "Choke", "Settings", "Stats", "Lock", "*Car*"},
   /* ESP */ {"Freno", "Sensi", "Antis", "Curva", "Fade", "Pwm_F", "Freno+", "Limite", "Ajustes", "Stats", "Bloqueo", "*Auto*"},
-  /* DEU */ {"Bremse", "Sensi", "Antis", "Kurve", "Fade", "Pwm_F", "Bremse+", "Limit", "Setup", "Stats", "Sperre", "*Auto*"},
+  /* DEU */ {"Bremse", "Sensi", "Antis", "Kurve", "Anfahr", "Pwm_F", "Bremse+", "Limit", "Einstellg", "Stats", "Sperre", "*Auto*"},
   /* ITA */ {"Freno", "Sensi", "Antis", "Curva", "Fade", "Pwm_F", "Freno+", "Limite", "Setup", "Stats", "Blocco", "*Auto*"},
   /* NLD */ {"Rem", "Sensi", "Antis", "Curve", "Fade", "Pwm_F", "Rem+", "Limiet", "Instell", "Stats", "Vergr", "*Auto*"},
   /* POR */ {"Travao", "Sensi", "Antis", "Curva", "Fade", "Pwm_F", "Travao+", "Limite", "Ajustes", "Stats", "Bloq", "*Carro*"}
@@ -231,7 +231,7 @@ const char* SETTINGS_MENU_NAMES_PASCAL[][12] = {
   /* CS  */ {"Power", "Display", "Sound", "Hardware", "Stats", "Wifi", "Logging", "Lock", "Usb info", "Reset", "About", "Back"},
   /* ACD */ {"Power", "Display", "Sound", "Hardware", "Stats", "Wifi", "Logging", "Lock", "Usb info", "Reset", "About", "Back"},
   /* ESP */ {"Energia", "Pantalla", "Sonido", "Hardware", "Stats", "Wifi", "Logging", "Bloqueo", "Usb info", "Reset", "Acerca", "Atras"},
-  /* DEU */ {"Strom", "Anzeige", "Ton", "Hardware", "Stats", "Wifi", "Logging", "Sperre", "Usb info", "Reset", "Info", "Zuruck"},
+  /* DEU */ {"Strom", "Anzeige", "Ton", "Hardware", "Stats", "Wifi", "Telemetrie", "Sperre", "Usb Info", "Zurucksetzen", "Info", "Zuruck"},
   /* ITA */ {"Potenza", "Schermo", "Suono", "Hardware", "Stats", "Wifi", "Logging", "Blocco", "Usb info", "Reset", "Info", "Indietro"},
   /* NLD */ {"Stroom", "Display", "Geluid", "Hardware", "Stats", "Wifi", "Logging", "Vergr", "Usb info", "Reset", "Info", "Terug"},
   /* POR */ {"Energia", "Ecra", "Som", "Hardware", "Stats", "Wifi", "Logging", "Bloq", "Usb info", "Reset", "Sobre", "Voltar"}
@@ -244,7 +244,7 @@ const char* POWER_MENU_NAMES_PASCAL[][6] = {
   /* CS  */ {"Scrsv", "Sleep", "Deep Sleep", "Startup", "Vin Cal.", "Back"},
   /* ACD */ {"Scrsv", "Sleep", "Deep Sleep", "Startup", "Vin Cal.", "Back"},
   /* ESP */ {"Scrsv", "Reposo", "Susp Prof", "Arranque", "Vin Cal.", "Atras"},
-  /* DEU */ {"Scrsv", "Schlaf", "Tief Schl", "Start", "Vin Kal.", "Zuruck"},
+  /* DEU */ {"Hinweis", "Standby", "Ausschalten", "Start", "Vin Kal.", "Zuruck"},
   /* ITA */ {"Scrsv", "Riposo", "Sonno Prof", "Avvio", "Vin Cal.", "Indietro"},
   /* NLD */ {"Scrsv", "Slapen", "Diep Slp", "Start", "Vin kal.", "Terug"},
   /* POR */ {"Scrsv", "Dormir", "Sono Prof", "Arranque", "Vin Cal.", "Voltar"}
@@ -257,7 +257,7 @@ const char* DISPLAY_MENU_NAMES_PASCAL[][8] = {
   /* CS  */ {"Race Mode", "Language", "Case", "Font Size", "Advanced", "Steps", "Status bar", "Back"},
   /* ACD */ {"Race Mode", "Language", "Case", "Font Size", "Advanced", "Steps", "Status bar", "Back"},
   /* ESP */ {"Modo Race", "Idioma", "Estilo", "Tam texto", "Avanzado", "Pasos", "Barra est", "Atras"},
-  /* DEU */ {"Race Modus", "Sprache", "Stil", "Schrift", "Erweitert", "Schritte", "Statusleiste", "Zuruck"},
+  /* DEU */ {"Renn Modus", "Sprache", "Stil", "Schrift", "Erweitert", "Schritte", "Statusleiste", "Zuruck"},
   /* ITA */ {"Modo Gara", "Lingua", "Stile", "Dim testo", "Avanzato", "Passi", "Barra stato", "Indietro"},
   /* NLD */ {"Race Modus", "Taal", "Stijl", "Tekstgrt", "Geavanceerd", "Stappen", "Statusbalk", "Terug"},
   /* POR */ {"Modo Race", "Idioma", "Estilo", "Tam texto", "Avancado", "Passos", "Barra est", "Voltar"}
@@ -270,7 +270,7 @@ const char* STEPS_MENU_NAMES_PASCAL[][4] = {
   /* CS  */ {"Antispin", "Brake step", "Sensi step", "Back"},
   /* ACD */ {"Antispin", "Brake step", "Sensi step", "Back"},
   /* ESP */ {"Antispin", "Paso freno", "Paso sensi", "Atras"},
-  /* DEU */ {"Antispin", "Brk schritt", "Sen schritt", "Zuruck"},
+  /* DEU */ {"Antispin", "Brems schr", "Sensi schr", "Zuruck"},
   /* ITA */ {"Antispin", "Passo freno", "Passo sensi", "Indietro"},
   /* NLD */ {"Antispin", "Stap rem", "Stap sensi", "Terug"},
   /* POR */ {"Antispin", "Passo freio", "Passo sensi", "Voltar"}
@@ -296,7 +296,7 @@ const char* CAR_MENU_OPTIONS_PASCAL[][5] = {
   /* CS  */ {"Select", "Rename", "Raceswp", "Copy", "Reset"},
   /* ACD */ {"Select", "Rename", "Raceswp", "Copy", "Reset"},
   /* ESP */ {"Elegir", "Renomb", "Raceswp", "Copiar", "Reset"},
-  /* DEU */ {"Wahl", "Name", "Raceswp", "Kopier", "Reset"},
+  /* DEU */ {"Waehlen", "Name", "Gridwe", "Kopieren", "Zurucksetzen"},
   /* ITA */ {"Scegli", "Rinom", "Raceswp", "Copia", "Reset"},
   /* NLD */ {"Kies", "Hernoem", "Raceswp", "Kopie", "Reset"},
   /* POR */ {"Escolh", "Renome", "Raceswp", "Copiar", "Reset"}
@@ -309,7 +309,7 @@ const char* VIEW_MODE_LABELS_PASCAL[][3] = {
   /* CS  */ {"Off", "Full", "Simple"},
   /* ACD */ {"Off", "Full", "Simple"},
   /* ESP */ {"Off", "Total", "Simple"},
-  /* DEU */ {"Aus", "Voll", "Einf"},
+  /* DEU */ {"Aus", "Voll", "Einfa"},
   /* ITA */ {"Off", "Pieno", "Sempl"},
   /* NLD */ {"Uit", "Vol", "Eenv"},
   /* POR */ {"Off", "Total", "Simp"}
@@ -348,7 +348,7 @@ const char* RELEASE_BRAKE_MODE_LABELS_PASCAL[][3] = {
   /* CS  */ {"Off", "Qck", "Drg"},
   /* ACD */ {"Off", "Qck", "Drg"},
   /* ESP */ {"Off", "Qck", "Drg"},
-  /* DEU */ {"Aus", "Qck", "Drg"},
+  /* DEU */ {"Aus", "Sch", "Vzg"},
   /* ITA */ {"Off", "Qck", "Drg"},
   /* NLD */ {"Uit", "Qck", "Drg"},
   /* POR */ {"Off", "Qck", "Drg"}
@@ -413,7 +413,7 @@ const char* STR_LIMITER[] = {
 };
 const char* STR_CALIBRATION[] = {
   "KALIBRERING", "CALIBRATION", "CALIBRATION", "CALIBRATION",
-  "CALIBRACION", "KALIBRATION", "CALIBRAZIONE", "KALIBRATIE", "CALIBRACAO"
+  "CALIBRACION", "KALIBRIERUNG", "CALIBRAZIONE", "KALIBRATIE", "CALIBRACAO"
 };
 const char* STR_PRESS_RELEASE[] = {
   "trykk/slipp gass", "press/release trg", "press/release trg", "press/release trg",

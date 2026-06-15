@@ -61,10 +61,10 @@ static AdvancedBrakeRowType getAdvancedBrakeRowType(uint16_t mode, uint8_t visib
 
 static const char* getAdvancedBrakeRowLabel(uint8_t lang, uint16_t mode, AdvancedBrakeRowType rowType) {
   static const char* BUTTON_LABELS[9] = {"Alt.brems", "Alt.Brake", "Alt.Brake", "Alt.Brake", "Alt.Freno", "Alt.Brems", "Alt.Freno", "Alt.Rem", "Alt.Trav"};
-  static const char* MODE_LABELS[9]   = {"Rel.brems", "Rel.Brake", "Rel.Brake", "Rel.Brake", "Rel.Freno", "Rel.Brems", "Rel.Freno", "Rel.Rem", "Rel.Trav"};
-  static const char* ZONE_LABELS[9]   = {"Sone", "Zone", "Zone", "Zone", "Zona", "Zone", "Zona", "Zone", "Zona"};
-  static const char* QUICK_LABELS[9]  = {"Quick", "Quick", "Quick", "Quick", "Quick", "Quick", "Quick", "Quick", "Quick"};
-  static const char* DRAG_LABELS[9]   = {"Drag", "Drag", "Drag", "Drag", "Drag", "Drag", "Drag", "Drag", "Drag"};
+  static const char* MODE_LABELS[9]   = {"Rel.brems", "Rel.Brake", "Rel.Brake", "Rel.Brake", "Rel.Freno", "Dyn.Brems", "Rel.Freno", "Rel.Rem", "Rel.Trav"};
+  static const char* ZONE_LABELS[9]   = {"Sone", "Zone", "Zone", "Zone", "Zona", "Bereich", "Zona", "Zone", "Zona"};
+  static const char* QUICK_LABELS[9]  = {"Quick", "Quick", "Quick", "Quick", "Quick", "Schnell", "Quick", "Quick", "Quick"};
+  static const char* DRAG_LABELS[9]   = {"Drag", "Drag", "Drag", "Drag", "Drag", "Verzug", "Drag", "Drag", "Drag"};
 
   switch (rowType) {
     case AB_ROW_BUTTON:
@@ -88,7 +88,7 @@ static const char* getReleaseBrakeMenuModeValue(uint8_t lang, uint16_t mode) {
     {"OFF", "QUICK", "DRAG"},
     {"OFF", "QUICK", "DRAG"},
     {"OFF", "QUICK", "DRAG"},
-    {"AUS", "QUICK", "DRAG"},
+    {"AUS", "SCHNELL", "VERUG"},
     {"OFF", "QUICK", "DRAG"},
     {"UIT", "QUICK", "DRAG"},
     {"OFF", "QUICK", "DRAG"}

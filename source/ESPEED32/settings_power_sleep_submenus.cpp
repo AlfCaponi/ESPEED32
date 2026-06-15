@@ -55,7 +55,7 @@ void showSleepSettings() {
 
   /* Labels [NOR, ENG, CS, ACD, ESP, DEU, ITA, NLD, POR] */
   const char* lblInterval[9] = {"INTERV.", "INTERVAL", "INTERVAL", "INTERVAL", "INTERVALO", "INTERVAL", "INTERVAL", "INTERVAL", "INTERVAL"};
-  const char* lblNow[9]      = {"SOV NA",  "SLEEP NOW", "SLEEP NOW", "SLEEP NOW", "REPOSO YA", "JETZT RUH", "DORMI ORA", "SLAAP NU", "DORMIR JA"};
+  const char* lblNow[9]      = {"SOV NA",  "SLEEP NOW", "SLEEP NOW", "SLEEP NOW", "REPOSO YA", "STANDBY", "DORMI ORA", "SLAAP NU", "DORMIR JA"};
   const uint8_t ITEM_NOW = 0;
   const uint8_t ITEM_INTERVAL = 1;
   const uint8_t ITEM_BACK = 2;
@@ -213,7 +213,7 @@ void showDeepSleepSettings() {
   uint16_t lang = g_storedVar.language;
 
   const char* lblInterval[9] = {"INTERV.",   "INTERVAL",  "INTERVAL",  "INTERVAL",  "INTERVALO", "INTERVAL", "INTERVAL", "INTERVAL", "INTERVAL"};
-  const char* lblNow[9]      = {"SLUKK NA",  "SLEEP NOW", "SLEEP NOW", "SLEEP NOW", "APAGA YA",  "AUS JETZT", "SPEGNI ORA", "UIT NU", "DESLIG JA"};
+  const char* lblNow[9]      = {"SLUKK NA",  "SLEEP NOW", "SLEEP NOW", "SLEEP NOW", "APAGA YA",  "AUSSCHALTEN", "SPEGNI ORA", "UIT NU", "DESLIG JA"};
   const uint8_t ITEM_NOW = 0;
   const uint8_t ITEM_INTERVAL = 1;
   const uint8_t ITEM_BACK = 2;
