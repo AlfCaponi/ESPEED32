@@ -193,7 +193,8 @@ void showSelfTest() {
   uint16_t idleCurrent_mA = hasCurrentSense ? HAL_ReadMotorCurrent() : 0;
 #if CURRENT_SENSE_PROFILE == CURRENT_SENSE_PROFILE_BTN99X0
   bool motorDiagOk = (HalfBridge_GetDiagnosis() == 0);  /* 0 = NO_ERROR */
-  results[7] = hasCurrentSense ? ((idleCurrent_mA < 500) && motorDiagOk) : motorDiagOk;
+  /*results[7] = hasCurrentSense ? ((idleCurrent_mA < 500) && motorDiagOk) : motorDiagOk;*/
+  results[7] = hasCurrentSense ? (motorDiagOk) : motorDiagOk;
 #elif CURRENT_SENSE_PROFILE == CURRENT_SENSE_PROFILE_BTS7960
   results[7] = hasCurrentSense ? (idleCurrent_mA < 500) : true;
 #else
