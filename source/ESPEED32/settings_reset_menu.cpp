@@ -260,7 +260,12 @@ static void doResetCar() {
     g_storedVar.carParam[i].quickBrakeEnabled    = QUICK_BRAKE_ENABLED_DEFAULT;
     g_storedVar.carParam[i].quickBrakeThreshold  = QUICK_BRAKE_THRESHOLD_DEFAULT;
     g_storedVar.carParam[i].quickBrakeStrength   = QUICK_BRAKE_STRENGTH_DEFAULT;
-    sprintf(g_storedVar.carParam[i].carName, "CAR%d", i);
+    /* CAR1 ... CA20 */
+    if (i < 9) {
+    	sprintf(g_storedVar.carParam[i].carName, "CAR%d", i+1);
+    } else {
+    	sprintf(g_storedVar.carParam[i].carName, "CA%d", i+1); /* Size is 4 + null */
+    }
   }
 }
 
