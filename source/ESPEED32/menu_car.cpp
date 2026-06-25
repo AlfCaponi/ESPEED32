@@ -111,13 +111,16 @@ void showCarSelection() {
     {
       /* Print the item (car) name */
       obdWriteString(&g_obd, 0, 0, i * HEIGHT12x16, g_carMenu.item[frameUpper + i].name, FONT_12x16, (g_storedVar.selectedCarNumber - frameUpper == i) ? OBD_WHITE : OBD_BLACK, 1);
-      if (g_carMenu.item[frameUpper + i].value != ITEM_NO_VALUE)
-      {
+//  if (g_carMenu.item[frameUpper + i].value != ITEM_NO_VALUE)
+//    {
         /* value is a generic pointer to void, so first cast to uint16_t pointer, then take the pointed value */
-        sprintf(msgStr, "%2d", *(uint16_t *)(g_carMenu.item[frameUpper + i].value));
+//      sprintf(msgStr, "%2d", *(uint16_t *)(g_carMenu.item[frameUpper + i].value));
         /* Print the item value (car number) */
-        obdWriteString(&g_obd, 0, OLED_WIDTH - 24, i * HEIGHT12x16, msgStr, FONT_12x16, OBD_BLACK, 1);
-      }
+//      obdWriteString(&g_obd, 0, OLED_WIDTH - 24, i * HEIGHT12x16, msgStr, FONT_12x16, OBD_BLACK, 1);
+//    } 
+	  int xnr = frameUpper + i + 1;
+      sprintf(msgStr, "%2d", xnr);
+      obdWriteString(&g_obd, 0, OLED_WIDTH - 24, i * HEIGHT12x16, msgStr, FONT_12x16, OBD_BLACK, 1);
     }
 
     /* Print car selection label on the bottom of the screen */

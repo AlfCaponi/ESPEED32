@@ -7,7 +7,7 @@ const char* MENU_NAMES[][12] = {
   /* CS  */ {"BRAKE", "ATTACK", "CHOKE2", "PROFIL", "FADE", "PWM_F", "BRAKE+", "CHOKE1", "SETTINGS", "STATS", "LOCK", "*CAR*"},
   /* ACD */ {"BRAKE", "SENSI", "ANTIS", "CURVE", "FADE", "PWM_F", "BRAKE+", "CHOKE", "SETTINGS", "STATS", "LOCK", "*CAR*"},
   /* ESP */ {"FRENO", "SENSI", "ANTIS", "CURVA", "FADE", "PWM_F", "FRENO+", "LIMITE", "AJUSTES", "STATS", "BLOQUEO", "*AUTO*"},
-  /* DEU */ {"BREMSE", "SENSI", "ANTIS", "KURVE", "ANFAHR", "PWM_F", "BREMSE+", "LIMIT", "EINSTELLG", "STATS", "SPERRE", "*AUTO*"},
+  /* DEU */ {"BREMSE", "SENSI", "ANTIS", "KURVE", "START", "PWM_F", "BREMSE+", "LIMIT", "EINSTELLG", "STATS", "SPERRE", "*AUTO*"},
   /* ITA */ {"FRENO", "SENSI", "ANTIS", "CURVA", "FADE", "PWM_F", "FRENO+", "LIMITE", "SETUP", "STATS", "BLOCCO", "*AUTO*"},
   /* NLD */ {"REM", "SENSI", "ANTIS", "CURVE", "FADE", "PWM_F", "REM+", "LIMIET", "INSTELL", "STATS", "VERGR", "*AUTO*"},
   /* POR */ {"TRAVAO", "SENSI", "ANTIS", "CURVA", "FADE", "PWM_F", "TRAVAO+", "LIMITE", "AJUSTES", "STATS", "BLOQ", "*CARRO*"}
@@ -218,7 +218,7 @@ const char* MENU_NAMES_PASCAL[][12] = {
   /* CS  */ {"Brake", "Attack", "Choke2", "Profil", "Fade", "Pwm_F", "Brake+", "Choke1", "Settings", "Stats", "Lock", "*Car*"},
   /* ACD */ {"Brake", "Sensi", "Antis", "Curve", "Fade", "Pwm_F", "Brake+", "Choke", "Settings", "Stats", "Lock", "*Car*"},
   /* ESP */ {"Freno", "Sensi", "Antis", "Curva", "Fade", "Pwm_F", "Freno+", "Limite", "Ajustes", "Stats", "Bloqueo", "*Auto*"},
-  /* DEU */ {"Bremse", "Sensi", "Antis", "Kurve", "Anfahr", "Pwm_F", "Bremse+", "Limit", "Einstellg", "Stats", "Sperre", "*Auto*"},
+  /* DEU */ {"Bremse", "Sensi", "Antis", "Kurve", "Start", "Pwm_F", "Bremse+", "Limit", "Einstellg", "Stats", "Sperre", "*Auto*"},
   /* ITA */ {"Freno", "Sensi", "Antis", "Curva", "Fade", "Pwm_F", "Freno+", "Limite", "Setup", "Stats", "Blocco", "*Auto*"},
   /* NLD */ {"Rem", "Sensi", "Antis", "Curve", "Fade", "Pwm_F", "Rem+", "Limiet", "Instell", "Stats", "Vergr", "*Auto*"},
   /* POR */ {"Travao", "Sensi", "Antis", "Curva", "Fade", "Pwm_F", "Travao+", "Limite", "Ajustes", "Stats", "Bloq", "*Carro*"}
